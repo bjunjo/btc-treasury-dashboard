@@ -627,7 +627,7 @@ export default function Home() {
         <div className="container py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <Bitcoin className="w-5 h-5 text-btc" />
-            <span className="font-bold text-foreground tracking-tight">BTC Treasury</span>
+            <h1 className="font-bold text-foreground tracking-tight text-base leading-none">BTC Treasury</h1>
             <span className="hidden sm:inline text-xs text-muted-foreground font-mono border border-border rounded px-1.5 py-0.5">
               Intelligence
             </span>
@@ -667,6 +667,9 @@ export default function Home() {
             <SummaryStat label="BTC Price" value={fmtUsd(data.btc.usd)} />
           </div>
         )}
+
+        {/* Watchlist heading */}
+        <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest mb-3">Bitcoin Treasury Watchlist</h2>
 
         {/* Sort controls */}
         <div className="flex items-center gap-2 mb-3">

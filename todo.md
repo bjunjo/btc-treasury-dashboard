@@ -78,3 +78,14 @@
 ## Legal Protection
 - [x] Footer: persistent legal disclaimer (no investment advice, personal use only, data accuracy not guaranteed)
 - [x] First-visit modal: user must acknowledge disclaimer before viewing data
+
+## New Companies (Future)
+- [ ] Capital B (cptlb.com): research exchange listing, country, official disclosure API
+- [ ] OrangeBTC (oranjebtc.com): research exchange listing, country, official disclosure API
+- [ ] Add both companies to watchlist once disclosure sources confirmed
+
+## SEO Fixes
+- [x] Page title: extend to 30-60 characters ("BTC Treasury Intelligence — Live Bitcoin Holdings" = 49 chars)
+- [x] Add meta keywords tag to index.html
+- [x] Add H1 heading: header brand “BTC Treasury” promoted to <h1>
+- [x] Add H2 heading: “Bitcoin Treasury Watchlist” above the table
