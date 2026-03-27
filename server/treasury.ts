@@ -12,6 +12,7 @@
 
 import axios from "axios";
 import { parse as parseHtml } from "node-html-parser";
+import { invokeLLM } from "./_core/llm";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,33 @@ async function fetchMstrDebt(btcHeld: number, btcUsd: number): Promise<{ debtUsd
   }
 }
 
+// ── Japanese → English translation (for TDnet titles) ───────────────────────
+
+const _titleCache: Map<string, string> = new Map();
+
+async function translateJapanese(title: string): Promise<string> {
+  // If already ASCII/Latin, skip translation
+  if (!/[\u3000-\u9FFF\uF900-\uFAFF]/.test(title)) return title;
+  if (_titleCache.has(title)) return _titleCache.get(title)!;
+  try {
+    const res = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: "You are a financial disclosure translator. Translate the Japanese text to concise English (max 12 words). Return ONLY the English translation, no explanation.",
+        },
+        { role: "user", content: title },
+      ],
+    });
+    const raw = res.choices?.[0]?.message?.content;
+    const translated = (typeof raw === "string" ? raw.trim() : null) ?? title;
+    _titleCache.set(title, translated);
+    return translated;
+  } catch {
+    return title;
+  }
+}
+
 // ── TDnet Disclosures (Metaplanet) ────────────────────────────────────────────
 
 async function fetchTdnetDisclosures(): Promise<Disclosure[]> {
@@ -258,11 +286,12 @@ async function fetchTdnetDisclosures(): Promise<Disclosure[]> {
         const pdfHref = titleCell?.querySelector("a")?.getAttribute("href") ?? null;
         const pdfUrl = pdfHref ? `https://www.release.tdnet.info/inbs/${pdfHref.replace(/^\.\//, "")}` : null;
         const isBtc = /bitcoin|btc|ビットコイン|BTC/i.test(title);
+        const titleEn = await translateJapanese(title);
         disclosures.push({
           company: "Metaplanet",
           exchange: "TSE / TDnet",
           date: `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)} ${timeCell}`,
-          title,
+          title: titleEn,
           isBtc,
           isInsideInfo: false,
           pdfUrl,

@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin } from "lucide-react";
+import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin, HelpCircle } from "lucide-react";
 import type { CompanyData, Disclosure, TreasuryData } from "../../../server/treasury";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -66,16 +66,13 @@ function MNavBadge({ value }: { value: number | null }) {
 
 // ── FX Rate Bar ───────────────────────────────────────────────────────────────
 
-function FxBar({ fx, btc }: { fx: TreasuryData["fx"]; btc: TreasuryData["btc"] }) {
+function FxBar({ fx }: { fx: TreasuryData["fx"] }) {
   const items = [
     fmtFx("USD/KRW", fx.usdKrw, "₩", 0),
     fmtFx("USD/JPY", fx.usdJpy, "¥", 2),
     fmtFx("GBP/USD", fx.gbpUsd, "$", 4),
     fmtFx("USD/SEK", fx.usdSek, "kr", 2),
-    btc.kimchiPremium !== null
-      ? `Kimchi ₿: ${btc.kimchiPremium >= 0 ? "+" : ""}${btc.kimchiPremium.toFixed(2)}%`
-      : null,
-  ].filter(Boolean) as string[];
+  ];
 
   return (
     <div className="border-b border-border bg-card/50">
@@ -112,8 +109,19 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
           </div>
         </div>
         {btc.krwUpbit && (
-          <div className="hidden sm:block text-right">
-            <span className="font-mono text-xs text-muted-foreground">Upbit KRW</span>
+          <div className="text-right">
+            <div className="flex items-center justify-end gap-2">
+              <span className="font-mono text-xs text-muted-foreground">BTC-KRW</span>
+              {btc.kimchiPremium !== null && (
+                <span className={`font-mono text-xs tabular-nums px-1.5 py-0.5 rounded border ${
+                  btc.kimchiPremium >= 0
+                    ? "text-up border-green-800/40 bg-green-900/20"
+                    : "text-down border-red-800/40 bg-red-900/20"
+                }`}>
+                  Kimchi {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
+                </span>
+              )}
+            </div>
             <div className="font-mono text-sm text-foreground tabular-nums">
               ₩{btc.krwUpbit.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </div>
@@ -322,7 +330,40 @@ function TableSkeleton() {
   );
 }
 
-// ── Disclosure Feed ───────────────────────────────────────────────────────────
+// ── Formula Toggle ──────────────────────────────────────────────────────────
+
+function FormulaToggle() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+      >
+        <HelpCircle className="w-3.5 h-3.5 group-hover:text-btc transition-colors" />
+        <span>How are mNAV and BTC Coverage calculated?</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 px-3 py-2.5 bg-card border border-border rounded-md space-y-1.5">
+          <div className="font-mono text-xs text-muted-foreground">
+            <span className="text-foreground font-semibold">mNAV(EV)</span>
+            {" = (Fully Diluted Market Cap + Net Debt) ÷ BTC Treasury Value"}
+          </div>
+          <div className="font-mono text-xs text-muted-foreground">
+            <span className="text-foreground font-semibold">BTC Coverage</span>
+            {" = BTC Treasury Value ÷ Total Debt"}
+          </div>
+          <div className="text-xs text-muted-foreground/70 pt-0.5">
+            Net Debt = Total Debt − Cash. EV (Enterprise Value) reflects the true cost of acquiring the company including its debt load.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Disclosure Feed ────────────────────────────────────────────────────────────
 
 function DisclosureFeed({ disclosures }: { disclosures: Disclosure[] }) {
   if (disclosures.length === 0) return null;
@@ -335,39 +376,40 @@ function DisclosureFeed({ disclosures }: { disclosures: Disclosure[] }) {
       </div>
       <div className="divide-y divide-border">
         {disclosures.slice(0, 8).map((d, i) => (
-          <div key={i} className="px-4 py-3 flex items-start gap-3 hover:bg-card/50 transition-colors">
-            <div className="flex-shrink-0 mt-0.5">
-              {d.isBtc
-                ? <span className="text-btc text-sm font-bold">₿</span>
-                : <span className="w-4 h-4 block" />
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <span className="text-xs font-medium text-btc">{d.company}</span>
-                <span className="text-xs text-muted-foreground">{d.exchange}</span>
-                {d.isInsideInfo && (
-                  <span className="text-xs text-risk-high flex items-center gap-0.5">
-                    <AlertTriangle className="w-3 h-3" /> Inside Info
-                  </span>
-                )}
-              </div>
-              <div className="text-sm text-foreground leading-snug">
-                {d.url ? (
-                  <a href={d.url} target="_blank" rel="noopener noreferrer" className="hover:text-btc transition-colors">
-                    {d.title}
-                  </a>
-                ) : d.title}
-                {d.pdfUrl && (
-                  <a href={d.pdfUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs text-btc hover:underline">
-                    PDF ↗
-                  </a>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{d.date.slice(0, 16)}</div>
-            </div>
-            <div className="flex-shrink-0 hidden sm:block">
-              <span className="text-xs text-muted-foreground/60 font-mono">{d.source}</span>
+          <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-card/50 transition-colors">
+            {/* BTC indicator */}
+            <span className={`flex-shrink-0 font-bold text-sm w-4 text-center ${d.isBtc ? "text-btc" : "text-transparent"}`}>₿</span>
+            {/* Company + exchange tag */}
+            <span className="flex-shrink-0 text-xs font-mono text-btc w-24 truncate">{d.company}</span>
+            {/* Date */}
+            <span className="flex-shrink-0 font-mono text-xs text-muted-foreground hidden sm:block w-32">{d.date.slice(0, 16)}</span>
+            {/* Title as link */}
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              {d.isInsideInfo && <AlertTriangle className="w-3 h-3 text-risk-high flex-shrink-0" />}
+              {d.url ? (
+                <a
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-foreground hover:text-btc transition-colors truncate"
+                  title={d.title}
+                >
+                  {d.title}
+                </a>
+              ) : (
+                <span className="text-sm text-foreground truncate" title={d.title}>{d.title}</span>
+              )}
+              {d.pdfUrl && (
+                <a
+                  href={d.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 text-xs text-btc hover:underline font-mono"
+                  onClick={e => e.stopPropagation()}
+                >
+                  PDF↗
+                </a>
+              )}
             </div>
           </div>
         ))}
@@ -437,7 +479,7 @@ export default function Home() {
       {data && <BtcStrip btc={data.btc} />}
 
       {/* FX Rate Bar */}
-      {data && <FxBar fx={data.fx} btc={data.btc} />}
+      {data && <FxBar fx={data.fx} />}
 
       {/* Main content */}
       <main className="container py-6">
@@ -513,17 +555,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* mNAV explanation */}
-        {data && (
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
-            <span className="text-xs text-muted-foreground font-mono">
-              mNAV(EV) = (FD Market Cap + Net Debt) / BTC Treasury Value
-            </span>
-            <span className="text-xs text-muted-foreground font-mono">
-              BTC Coverage = BTC Treasury / Total Debt
-            </span>
-          </div>
-        )}
+        {/* Formula toggle */}
+        {data && <FormulaToggle />}
 
         {/* Disclosure feed */}
         {data && <DisclosureFeed disclosures={data.disclosures} />}

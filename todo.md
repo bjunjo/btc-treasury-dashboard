@@ -28,3 +28,9 @@
 - [x] Auto-refresh every 60 seconds
 - [x] Loading skeleton states
 - [x] Last updated timestamp
+
+## UX Improvements (Round 2)
+- [x] TDnet disclosure titles: translate Japanese → English via LLM on server
+- [x] Disclosure UI: simplify to title + direct link only (remove source badge, PDF separate)
+- [x] BTC price strip: rename "Upbit KRW" → "BTC-KRW", show kimchi premium inline next to it
+- [x] Hide mNAV/Coverage formula text behind a collapsible toggle
