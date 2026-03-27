@@ -138,7 +138,19 @@ pnpm install
 pnpm dev
 ```
 
-No API keys required. All data sources used are public.
+The dashboard runs without any API keys. All market data, prices, and regulatory filings are fetched from public sources.
+
+### Optional: Japanese translation for TDnet disclosures
+
+Metaplanet files disclosures in Japanese via TDnet. Without a key, titles are displayed in their original Japanese. To enable automatic English translation, set an OpenAI-compatible API key:
+
+```bash
+# .env (create this file in the project root — it is gitignored)
+OPENAI_API_KEY=sk-...          # Required for translation
+OPENAI_API_BASE_URL=https://api.openai.com/v1  # Optional: override for any OpenAI-compatible endpoint
+```
+
+The translation uses `gpt-4o-mini` by default and translates each unique title once, then caches the result in memory for the lifetime of the process. If the key is not set or the API call fails, the original Japanese title is shown — the dashboard continues to work normally either way.
 
 ---
 
