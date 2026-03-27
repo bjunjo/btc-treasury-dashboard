@@ -365,14 +365,19 @@ async function fetchMfnDisclosures(): Promise<Disclosure[]> {
       timeout: 8000,
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/rss+xml" },
     });
-    const root = parseHtml(res.data, { lowerCaseTagName: false });
-    const items = root.querySelectorAll("item");
-    for (const item of items.slice(0, 10)) {
-      const title = item.querySelector("title")?.text ?? "";
-      const pubDate = item.querySelector("pubDate")?.text ?? "";
-      const link = item.querySelector("link")?.text ?? null;
-      const tags = item.querySelectorAll("x\\:tag, tag").map(t => t.text.toLowerCase());
-      const isInsideInfo = tags.some(t => t.includes("inside-information"));
+    const raw: string = res.data;
+
+    // node-html-parser treats <link> as void/self-closing, so use regex on raw XML
+    const itemBlocks = raw.match(/<item>[\s\S]*?<\/item>/g) ?? [];
+    for (const block of itemBlocks.slice(0, 10)) {
+      const title = (block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ??
+                     block.match(/<title>([^<]*)<\/title>/))?.[1]?.trim() ?? "";
+      const pubDate = (block.match(/<pubDate>([^<]*)<\/pubDate>/))?.[1]?.trim() ?? "";
+      // <link> in RSS is plain text between tags (not self-closing)
+      const link = (block.match(/<link>([^<]+)<\/link>/) ??
+                    block.match(/<guid[^>]*>([^<]+)<\/guid>/))?.[1]?.trim() ?? null;
+      const tagMatches = Array.from(block.matchAll(/<x:tag>([^<]*)<\/x:tag>/g)).map(m => m[1]!.toLowerCase());
+      const isInsideInfo = tagMatches.some(t => t.includes("inside-information"));
       const isBtc = /bitcoin|btc/i.test(title);
       if (!isBtc) continue;
       disclosures.push({

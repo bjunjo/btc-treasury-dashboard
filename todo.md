@@ -71,3 +71,6 @@
 
 ## UX Improvements (Round 10)
 - [x] Sort by: remove Price, add BTC/Share (sats per share)
+
+## Bug Fixes (Round 1)
+- [x] H100 MFN disclosures: fix broken/null URL so items are clickable
