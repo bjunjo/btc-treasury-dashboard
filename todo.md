@@ -101,3 +101,6 @@
 - [ ] Mobile sort UX: when sort is changed, show the active sort column prominently (first visible data column after Company)
 - [x] Add Market Cap (FD) column: Price × FD Shares, compact format ($xB), visible on sm+ screens
 - [x] Add "Mkt Cap" sort option to sort controls
+
+## UI Fixes (Round 12)
+- [x] Market Cap format: always show in $xB with 2 decimal places (e.g. $45.94B, $0.21B), never $xM

@@ -77,6 +77,12 @@ function fmtUsd(n: number | null, compact = false): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Market cap always in Billions with 2 decimal places (e.g. $45.94B, $0.21B)
+function fmtMktCap(n: number | null): string {
+  if (n === null || n === undefined) return "—";
+  return `$${(n / 1e9).toFixed(2)}B`;
+}
+
 function fmtBtc(n: number): string {
   return `₿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
@@ -255,7 +261,7 @@ function CompanyRow({
         {/* Mkt Cap (FD) — hidden on mobile */}
         <td className={`py-3 pr-3 text-right align-middle hidden sm:table-cell ${sortBy === "mktCap" ? "text-btc" : ""}`}>
           <span className="font-mono text-sm tabular-nums font-semibold">
-            {fmtUsd(company.fdMarketCapUsd, true)}
+            {fmtMktCap(company.fdMarketCapUsd)}
           </span>
           <div className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">FD</div>
         </td>
@@ -301,7 +307,7 @@ function CompanyRow({
         <tr className="border-b border-border bg-card/30">
           <td colSpan={9} className="px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <DetailStat label="Market Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
+              <DetailStat label="Market Cap (FD)" value={fmtMktCap(company.fdMarketCapUsd)} />
               <DetailStat
                 label="BTC Treasury"
                 value={fmtUsd(company.btcTreasuryUsd, true)}
@@ -368,7 +374,7 @@ function CompanyRow({
             {/* Mobile-only fields */}
             <div className="sm:hidden grid grid-cols-2 gap-3 mb-4">
               <DetailStat label="Price (USD)" value={company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"} />
-              <DetailStat label="Mkt Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
+              <DetailStat label="Mkt Cap (FD)" value={fmtMktCap(company.fdMarketCapUsd)} />
               <DetailStat label="24h Change" value={chg.text} valueClass={chg.up ? "text-up" : "text-down"} />
               <DetailStat label="mNAV (EV)" value={company.mNavEv !== null ? `${company.mNavEv.toFixed(2)}x` : "—"} />
             </div>
