@@ -142,12 +142,20 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
               {btc.kimchiPremium !== null && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="cursor-help text-base leading-none select-none">🥬</span>
+                    <span className="inline-flex items-center gap-0.5 cursor-help">
+                      <span className="text-base leading-none select-none">🥬</span>
+                      <span
+                        className={`font-mono tabular-nums leading-none ${
+                          btc.kimchiPremium >= 0 ? "text-up" : "text-down"
+                        }`}
+                        style={{ fontSize: "11px" }}
+                      >
+                        {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
+                      </span>
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
-                    <p className="font-mono text-xs">
-                      Kimchi Premium: {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
-                    </p>
+                    <p className="font-mono text-xs font-semibold">Kimchi Premium</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Upbit KRW price vs USD price × FX rate
                     </p>
@@ -219,6 +227,9 @@ function CompanyRow({
           <span className="font-mono text-sm font-semibold text-btc tabular-nums">
             {fmtBtc(company.btcHeld)}
           </span>
+          <span className="font-mono text-muted-foreground/60 tabular-nums ml-1" style={{ fontSize: "10px" }}>
+            {((company.btcHeld / 21_000_000) * 100).toFixed(2)}%
+          </span>
         </td>
 
         {/* BTC/Share */}
@@ -253,7 +264,20 @@ function CompanyRow({
           <td colSpan={8} className="px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <DetailStat label="Market Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
-              <DetailStat label="BTC Treasury" value={fmtUsd(company.btcTreasuryUsd, true)} />
+              <DetailStat
+                label="BTC Treasury"
+                value={fmtUsd(company.btcTreasuryUsd, true)}
+                tip={
+                  <>
+                    <p className="font-mono text-xs font-semibold">
+                      {fmtBtc(company.btcHeld)} · {((company.btcHeld / 21_000_000) * 100).toFixed(2)}% of total supply
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Based on 21,000,000 BTC max supply
+                    </p>
+                  </>
+                }
+              />
               <DetailStat
                 label="Total Debt"
                 value={fmtUsd(company.debtUsd, true)}

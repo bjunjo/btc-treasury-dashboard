@@ -46,3 +46,10 @@
 - [x] Kimchi premium: replace +0.23% text with 🥬 emoji (tooltip shows the % on hover)
 - [x] Inline InfoTip tooltips on mNAV column header and BTC Coverage detail stat
 - [x] Remove FormulaToggle block (replaced by inline tooltips)
+
+## UX Improvements (Round 6)
+- [x] Kimchi premium: show % number visibly next to 🥬 emoji (small font, colored)
+
+## UX Improvements (Round 7)
+- [x] BTC supply share: show (btcHeld / 21M × 100, 2dp) as small text next to BTC Held in table row
+- [x] BTC supply share: also show in expanded detail panel
