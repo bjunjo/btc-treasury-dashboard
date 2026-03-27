@@ -68,3 +68,6 @@
 - [x] SEC EDGAR: fetch latest 8-K/SC 13G filings for Strategy (MSTR, CIK 0001050446)
 - [x] SEC EDGAR: fetch latest 8-K filings for Nakamoto Inc. (NAKA)
 - [x] Add MSTR and NAKA tabs to DisclosureFeed company filter (tabs are auto-generated from disclosure data)
+
+## UX Improvements (Round 10)
+- [x] Sort by: remove Price, add BTC/Share (sats per share)

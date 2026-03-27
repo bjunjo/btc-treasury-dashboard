@@ -551,7 +551,7 @@ export default function Home() {
     staleTime: 55_000,
   });
 
-  const [sortBy, setSortBy] = useState<"btc" | "mnav" | "price">("btc");
+  const [sortBy, setSortBy] = useState<"btc" | "mnav" | "btcPerShare">("btc");
   const lastUpdatedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -560,9 +560,9 @@ export default function Home() {
 
   const sortedCompanies = data?.companies
     ? [...data.companies].sort((a, b) => {
-        if (sortBy === "btc")   return b.btcHeld - a.btcHeld;
-        if (sortBy === "mnav")  return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
-        if (sortBy === "price") return (b.priceUsd ?? 0) - (a.priceUsd ?? 0);
+        if (sortBy === "btc")        return b.btcHeld - a.btcHeld;
+        if (sortBy === "mnav")        return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
+        if (sortBy === "btcPerShare") return (b.btcPerShareSats ?? 0) - (a.btcPerShareSats ?? 0);
         return 0;
       })
     : [];
@@ -621,7 +621,7 @@ export default function Home() {
         {/* Sort controls */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-muted-foreground">Sort by:</span>
-          {(["btc", "mnav", "price"] as const).map(s => (
+          {(["btc", "mnav", "btcPerShare"] as const).map(s => (
             <button
               key={s}
               onClick={() => setSortBy(s)}
@@ -631,7 +631,7 @@ export default function Home() {
                   : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
               }`}
             >
-              {s === "btc" ? "BTC Held" : s === "mnav" ? "mNAV" : "Price"}
+              {s === "btc" ? "BTC Held" : s === "mnav" ? "mNAV" : "BTC/Share"}
             </button>
           ))}
         </div>
