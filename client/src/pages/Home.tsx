@@ -1,16 +1,37 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin } from "lucide-react";
 import type { CompanyData, Disclosure, TreasuryData } from "../../../server/treasury";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── InfoTip ───────────────────────────────────────────────────────────────────
+
+function InfoTip({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center cursor-help ml-1 align-middle text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
+            <text x="6" y="9.2" textAnchor="middle" fontSize="7.5" fill="currentColor" fontFamily="monospace" fontWeight="bold">i</text>
+          </svg>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[300px] text-left leading-relaxed space-y-1">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtUsd(n: number | null, compact = false): string {
   if (n === null || n === undefined) return "—";
   if (compact) {
     if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-    if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-    if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+    if (Math.abs(n) >= 1e9)  return `$${(n / 1e9).toFixed(2)}B`;
+    if (Math.abs(n) >= 1e6)  return `$${(n / 1e6).toFixed(1)}M`;
     return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   }
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -96,6 +117,7 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
   return (
     <div className="border-b border-border bg-card">
       <div className="container py-2.5 flex items-center justify-between gap-4">
+        {/* Left: BTC USD price */}
         <div className="flex items-center gap-3">
           <Bitcoin className="w-5 h-5 text-btc flex-shrink-0" />
           <div>
@@ -103,21 +125,34 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
               {fmtUsd(btc.usd)}
             </span>
             <span className={`ml-2 font-mono text-sm tabular-nums ${up ? "text-up" : "text-down"}`}>
-              {up ? <TrendingUp className="inline w-3.5 h-3.5 mr-0.5" /> : <TrendingDown className="inline w-3.5 h-3.5 mr-0.5" />}
+              {up
+                ? <TrendingUp className="inline w-3.5 h-3.5 mr-0.5" />
+                : <TrendingDown className="inline w-3.5 h-3.5 mr-0.5" />
+              }
               {text}
             </span>
           </div>
         </div>
+
+        {/* Right: BTC-KRW + kimchi emoji */}
         {btc.krwUpbit && (
           <div className="text-right">
             <div className="flex items-center justify-end gap-1.5">
               <span className="font-mono text-xs text-muted-foreground">BTC-KRW</span>
               {btc.kimchiPremium !== null && (
-                <span className={`font-mono tabular-nums ${
-                  btc.kimchiPremium >= 0 ? "text-up" : "text-down"
-                }`} style={{ fontSize: "10px" }}>
-                  {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help text-base leading-none select-none">🥬</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p className="font-mono text-xs">
+                      Kimchi Premium: {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Upbit KRW price vs USD price × FX rate
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
             <div className="font-mono text-sm text-foreground tabular-nums">
@@ -219,17 +254,48 @@ function CompanyRow({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <DetailStat label="Market Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
               <DetailStat label="BTC Treasury" value={fmtUsd(company.btcTreasuryUsd, true)} />
-              <DetailStat label="Total Debt" value={fmtUsd(company.debtUsd, true)} />
+              <DetailStat
+                label="Total Debt"
+                value={fmtUsd(company.debtUsd, true)}
+                tip={
+                  <>
+                    <p className="font-mono text-xs font-semibold">Net Debt = Total Debt − Cash</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      EV (Enterprise Value) reflects the true cost of acquiring the company including its debt load.
+                    </p>
+                  </>
+                }
+              />
               <DetailStat
                 label="BTC Coverage"
-                value={company.btcCoverage !== null && company.debtUsd > 0
-                  ? `${company.btcCoverage.toFixed(2)}x`
-                  : company.debtUsd === 0 ? "No debt" : "—"
+                value={
+                  company.btcCoverage !== null && company.debtUsd > 0
+                    ? `${company.btcCoverage.toFixed(2)}x`
+                    : company.debtUsd === 0 ? "No debt" : "—"
+                }
+                tip={
+                  <>
+                    <p className="font-mono text-xs font-semibold">BTC Coverage = BTC Treasury Value ÷ Total Debt</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      How many times the BTC treasury covers total debt. Higher = safer.
+                    </p>
+                  </>
                 }
               />
               <DetailStat label="Exchange" value={company.exchange} />
               <DetailStat label="BTC/Share" value={fmtSats(company.btcPerShareSats)} />
-              <DetailStat label="mNAV (EV)" value={company.mNavEv !== null ? `${company.mNavEv.toFixed(3)}x` : "—"} />
+              <DetailStat
+                label="mNAV (EV)"
+                value={company.mNavEv !== null ? `${company.mNavEv.toFixed(3)}x` : "—"}
+                tip={
+                  <>
+                    <p className="font-mono text-xs font-semibold">mNAV(EV) = (FD Market Cap + Net Debt) ÷ BTC Treasury Value</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Enterprise Value-based premium over BTC NAV. 1.0x = fair value. &gt;1x = premium to BTC.
+                    </p>
+                  </>
+                }
+              />
               <DetailStat label="Price (local)" value={
                 company.priceLocal !== null
                   ? `${company.localCurrency === "GBp" ? "p" : company.localCurrency === "JPY" ? "¥" : company.localCurrency === "SEK" ? "kr" : "$"}${company.priceLocal.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
@@ -294,10 +360,23 @@ function CompanyRow({
   );
 }
 
-function DetailStat({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
+function DetailStat({
+  label,
+  value,
+  valueClass = "",
+  tip,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+  tip?: React.ReactNode;
+}) {
   return (
     <div>
-      <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
+      <div className="text-xs text-muted-foreground mb-0.5 flex items-center">
+        {label}
+        {tip && <InfoTip>{tip}</InfoTip>}
+      </div>
       <div className={`font-mono text-sm font-medium tabular-nums ${valueClass || "text-foreground"}`}>{value}</div>
     </div>
   );
@@ -328,39 +407,6 @@ function TableSkeleton() {
   );
 }
 
-// ── Formula Toggle ──────────────────────────────────────────────────────────
-
-function FormulaToggle() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-3">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-      >
-        <HelpCircle className="w-3.5 h-3.5 group-hover:text-btc transition-colors" />
-        <span>How are mNAV and BTC Coverage calculated?</span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="mt-2 px-3 py-2.5 bg-card border border-border rounded-md space-y-1.5">
-          <div className="font-mono text-xs text-muted-foreground">
-            <span className="text-foreground font-semibold">mNAV(EV)</span>
-            {" = (Fully Diluted Market Cap + Net Debt) ÷ BTC Treasury Value"}
-          </div>
-          <div className="font-mono text-xs text-muted-foreground">
-            <span className="text-foreground font-semibold">BTC Coverage</span>
-            {" = BTC Treasury Value ÷ Total Debt"}
-          </div>
-          <div className="text-xs text-muted-foreground/70 pt-0.5">
-            Net Debt = Total Debt − Cash. EV (Enterprise Value) reflects the true cost of acquiring the company including its debt load.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Disclosure Feed ────────────────────────────────────────────────────────────
 
 function DisclosureFeed({ disclosures }: { disclosures: Disclosure[] }) {
@@ -375,13 +421,9 @@ function DisclosureFeed({ disclosures }: { disclosures: Disclosure[] }) {
       <div className="divide-y divide-border">
         {disclosures.slice(0, 8).map((d, i) => (
           <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-card/50 transition-colors">
-            {/* BTC indicator */}
             <span className={`flex-shrink-0 font-bold text-sm w-4 text-center ${d.isBtc ? "text-btc" : "text-transparent"}`}>₿</span>
-            {/* Company + exchange tag */}
             <span className="flex-shrink-0 text-xs font-mono text-btc w-24 truncate">{d.company}</span>
-            {/* Date */}
             <span className="flex-shrink-0 font-mono text-xs text-muted-foreground hidden sm:block w-32">{d.date.slice(0, 16)}</span>
-            {/* Title as link */}
             <div className="flex-1 min-w-0 flex items-center gap-2">
               {d.isInsideInfo && <AlertTriangle className="w-3 h-3 text-risk-high flex-shrink-0" />}
               {d.url ? (
@@ -433,8 +475,8 @@ export default function Home() {
 
   const sortedCompanies = data?.companies
     ? [...data.companies].sort((a, b) => {
-        if (sortBy === "btc") return b.btcHeld - a.btcHeld;
-        if (sortBy === "mnav") return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
+        if (sortBy === "btc")   return b.btcHeld - a.btcHeld;
+        if (sortBy === "mnav")  return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
         if (sortBy === "price") return (b.priceUsd ?? 0) - (a.priceUsd ?? 0);
         return 0;
       })
@@ -521,8 +563,24 @@ export default function Home() {
                   <th className="py-2.5 pr-4 text-right hidden sm:table-cell">Price (USD)</th>
                   <th className="py-2.5 pr-4 text-right">BTC Held</th>
                   <th className="py-2.5 pr-4 text-right hidden md:table-cell">BTC/Share</th>
-                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">mNAV</th>
-                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">Risk</th>
+                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">
+                    <span className="inline-flex items-center justify-end">
+                      mNAV
+                      <InfoTip>
+                        <p className="font-mono text-xs font-semibold">mNAV(EV) = (FD Market Cap + Net Debt) ÷ BTC Treasury Value</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Enterprise Value premium over BTC NAV. 1.0x = fair value.</p>
+                      </InfoTip>
+                    </span>
+                  </th>
+                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">
+                    <span className="inline-flex items-center justify-end">
+                      Risk
+                      <InfoTip>
+                        <p className="font-mono text-xs font-semibold">BTC Coverage = BTC Treasury ÷ Total Debt</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">≥5x LOW · 2–5x MOD · 1–2x HIGH · &lt;1x CRIT · No debt NONE</p>
+                      </InfoTip>
+                    </span>
+                  </th>
                   <th className="py-2.5 pr-3 w-8" />
                 </tr>
               </thead>
@@ -552,9 +610,6 @@ export default function Home() {
             </table>
           )}
         </div>
-
-        {/* Formula toggle */}
-        {data && <FormulaToggle />}
 
         {/* Disclosure feed */}
         {data && <DisclosureFeed disclosures={data.disclosures} />}

@@ -37,3 +37,12 @@
 
 ## UX Improvements (Round 3)
 - [x] Kimchi premium badge: make smaller/subtler in BTC strip
+
+## UX Improvements (Round 4)
+- [x] Inline tooltips: mNAV column header, BTC Coverage detail stat, Net Debt label — show formula on hover
+- [x] Remove FormulaToggle block (replaced by inline tooltips)
+
+## UX Improvements (Round 5)
+- [x] Kimchi premium: replace +0.23% text with 🥬 emoji (tooltip shows the % on hover)
+- [x] Inline InfoTip tooltips on mNAV column header and BTC Coverage detail stat
+- [x] Remove FormulaToggle block (replaced by inline tooltips)
