@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1774587073085,
+      "tag": "0000_dusty_emma_frost",
+      "breakpoints": true
+    }
+  ]
+}
