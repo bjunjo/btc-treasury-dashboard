@@ -34,3 +34,6 @@
 - [x] Disclosure UI: simplify to title + direct link only (remove source badge, PDF separate)
 - [x] BTC price strip: rename "Upbit KRW" → "BTC-KRW", show kimchi premium inline next to it
 - [x] Hide mNAV/Coverage formula text behind a collapsible toggle
+
+## UX Improvements (Round 3)
+- [x] Kimchi premium badge: make smaller/subtler in BTC strip

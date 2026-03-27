@@ -110,15 +110,13 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
         </div>
         {btc.krwUpbit && (
           <div className="text-right">
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-1.5">
               <span className="font-mono text-xs text-muted-foreground">BTC-KRW</span>
               {btc.kimchiPremium !== null && (
-                <span className={`font-mono text-xs tabular-nums px-1.5 py-0.5 rounded border ${
-                  btc.kimchiPremium >= 0
-                    ? "text-up border-green-800/40 bg-green-900/20"
-                    : "text-down border-red-800/40 bg-red-900/20"
-                }`}>
-                  Kimchi {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
+                <span className={`font-mono tabular-nums ${
+                  btc.kimchiPremium >= 0 ? "text-up" : "text-down"
+                }`} style={{ fontSize: "10px" }}>
+                  {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
                 </span>
               )}
             </div>
