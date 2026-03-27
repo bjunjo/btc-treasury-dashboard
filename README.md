@@ -120,7 +120,7 @@ client/src/pages/Home.tsx  ← Dashboard UI
 - **Debt data for non-MSTR companies** is partially hardcoded and needs more rigorous sourcing (e.g., from annual reports or exchange filings). HVAC-related debt structures and off-balance-sheet items are not yet reflected.
 - **Fully diluted shares** for non-MSTR companies come from the most recent public filings and are updated manually. Automated live fetching from Yahoo Finance's `sharesOutstanding` field is planned.
 - **BTC/Share** for MSTR still uses a hardcoded share count (254M) rather than the live implied count from the API. This will be fixed in a future update.
-- **Planned additions:** Méliuz (Brazil), CapitalBee (France), and any other companies that establish meaningful BTC treasury positions.
+- **Planned additions:** Capital B (France, ALCPB.PA / CPTLF) and OranjeBTC (Brazil, OBTC3) — both already tracked in the "On the Radar" table above — plus any other companies that establish meaningful BTC treasury positions.
 
 ---
 
