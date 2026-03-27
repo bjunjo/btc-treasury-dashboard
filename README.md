@@ -31,7 +31,14 @@ This is my personal watchlist. If it's useful to you, fork it.
 | 4 | Smarter Web Co. | SWC.L | LSE AIM | 🇬🇧 UK |
 | 5 | H100 Group | HOGPF | Nasdaq First North | 🇸🇪 Sweden |
 
-**On the radar (not yet added):** Méliuz (Brazil, CASH3), CapitalBee / Capital B (France). These are companies I'm watching and expect to add as their treasury strategies mature.
+**On the radar (not yet added):**
+
+| Company | Ticker | Exchange | Country | BTC Held | Notes |
+|---------|--------|----------|---------|----------|---------|
+| Capital B | ALCPB.PA / CPTLF | Euronext Paris (Alternext) / OTC US | 🇫🇷 France | ~2,888 BTC | Europe's first Bitcoin treasury company; formerly The Blockchain Group. ~229.7M shares. |
+| OranjeBTC | OBTC3 | B3 (Bovespa) | 🇧🇷 Brazil | ~3,708 BTC | First publicly-traded Bitcoin treasury company in Latin America; listed Oct 2025. ~168.6M shares. |
+
+These are companies I'm watching and expect to add as their data sources and disclosure cadence mature.
 
 ---
 
