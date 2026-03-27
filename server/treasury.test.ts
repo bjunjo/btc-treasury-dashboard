@@ -196,12 +196,13 @@ describe("toUsd FX conversion", () => {
 // ── BTC per Share Tests ───────────────────────────────────────────────────────
 
 describe("BTC per share calculations", () => {
-  it("calculates sats per share for Strategy", () => {
-    const btcHeld = 528_185;
+  it("calculates sats per share for Strategy (762,099 BTC live from strategy.com API)", () => {
+    const btcHeld = 762_099;
     const shares = 254_000_000;
     const btcPerShare = btcHeld / shares;
     const sats = btcPerShare * 1e8;
-    expect(sats).toBeCloseTo(207_947, 0);
+    // 762099 / 254000000 * 1e8 = ~300,039 sats/share
+    expect(sats).toBeCloseTo(300_039, 0);
   });
 
   it("calculates sats per share for Metaplanet", () => {

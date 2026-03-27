@@ -211,21 +211,34 @@ async function fetchStockPrices(tickers: string[]): Promise<Record<string, { pri
   return result;
 }
 
-// ── MSTR Debt from strategy.com API ──────────────────────────────────────────
+// ── MSTR live data from strategy.com API ────────────────────────────────────
 
-async function fetchMstrDebt(btcHeld: number, btcUsd: number): Promise<{ debtUsd: number; cashUsd: number }> {
+interface MstrLiveData {
+  btcHeld: number;
+  debtUsd: number;
+  cashUsd: number;
+}
+
+async function fetchMstrLiveData(btcUsd: number): Promise<MstrLiveData> {
   try {
     const res = await axios.get("https://api.strategy.com/btc/bitcoinKpis", {
       timeout: 8000,
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Origin": "https://www.strategy.com",
+        "Referer": "https://www.strategy.com/",
+      },
     });
     const r = res.data?.results ?? {};
+    // btcHoldings is returned as a formatted string like "762,099"
+    const btcHeld = parseInt(String(r.btcHoldings ?? "").replace(/,/g, ""), 10) || HARDCODED.MSTR.btc;
+    // debtPrefByBN is the % of BTC NAV represented by debt + preferred (conservative)
     const debtPrefPct = parseFloat(r.debtPrefByBN ?? "35") / 100;
     const btcNav = btcHeld * btcUsd;
     const debtUsd = btcNav * debtPrefPct;
-    return { debtUsd, cashUsd: 0 }; // conservative: no cash offset
+    return { btcHeld, debtUsd, cashUsd: 0 };
   } catch {
-    return { debtUsd: HARDCODED.MSTR.debtUsd, cashUsd: HARDCODED.MSTR.cashUsd };
+    return { btcHeld: HARDCODED.MSTR.btc, debtUsd: HARDCODED.MSTR.debtUsd, cashUsd: HARDCODED.MSTR.cashUsd };
   }
 }
 
@@ -434,16 +447,20 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     let change24h = stock?.change ?? null;
     const priceConfidence: CompanyData["priceConfidence"] = stock ? "LIVE" : "HARDCODED";
 
-    // MSTR debt from strategy.com API
+    // MSTR: pull live btcHeld + debt from strategy.com API
     let debtUsd = hc.debtUsd;
     let cashUsd = hc.cashUsd;
+    let liveBtcHeld = hc.btc;
+    let btcConfidence: CompanyData["btcConfidence"] = "HARDCODED";
     if (ticker === "MSTR" && btc.usd) {
-      const mstrDebt = await fetchMstrDebt(hc.btc, btc.usd);
-      debtUsd = mstrDebt.debtUsd;
-      cashUsd = mstrDebt.cashUsd;
+      const mstrLive = await fetchMstrLiveData(btc.usd);
+      liveBtcHeld = mstrLive.btcHeld;
+      debtUsd = mstrLive.debtUsd;
+      cashUsd = mstrLive.cashUsd;
+      btcConfidence = "LIVE";
     }
 
-    const btcHeld = hc.btc;
+    const btcHeld = liveBtcHeld;
     const sharesDiluted = hc.sharesDiluted;
     const btcTreasuryUsd = btcHeld * btc.usd;
     const netDebtUsd = debtUsd - cashUsd;
@@ -483,7 +500,7 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
       btcTreasuryUsd,
       netDebtUsd,
       priceConfidence,
-      btcConfidence: "HARDCODED",
+      btcConfidence,
     });
   }
 

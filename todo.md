@@ -60,3 +60,6 @@
 ## UX Improvements (Round 9)
 - [x] Exchange Disclosures: company tabs (All / Strategy / Metaplanet / SWC / H100)
 - [x] Exchange Disclosures: collapsible section (collapsed by default)- [x] Exchange Disclosures: clean per-company layout -- exchange badge + date + title link only
+
+## Data Fixes (Round 1)
+- [x] Strategy MSTR: pull live btcHeld from strategy.com API (762,099 confirmed LIVE)
