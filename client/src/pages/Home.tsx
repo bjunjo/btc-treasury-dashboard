@@ -198,14 +198,21 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
 
 // -
 
+// Column visibility: which columns show at which breakpoint
+// mobile (default): Rank, Company, BTC Held, Expand
+// sm (640px+):       + Price, Mkt Cap, mNAV, Risk
+// md (768px+):       + BTC/Share
+
 function CompanyRow({
   company,
   rank,
   disclosures,
+  sortBy,
 }: {
   company: CompanyData;
   rank: number;
   disclosures: Disclosure[];
+  sortBy: SortKey;
 }) {
   const [expanded, setExpanded] = useState(false);
   const chg = fmtPct(company.change24h);
@@ -214,18 +221,18 @@ function CompanyRow({
   return (
     <>
       <tr
-        className="company-row border-b border-border cursor-pointer"
+        className="company-row border-b border-border cursor-pointer hover:bg-card/40 transition-colors"
         onClick={() => setExpanded(e => !e)}
       >
         {/* Rank */}
-        <td className="py-3 pl-4 pr-2 w-10">
+        <td className="py-3 pl-4 pr-2 w-10 align-middle">
           <span className="font-mono text-2xl font-bold text-muted-foreground/40 tabular-nums leading-none">
             {rank}
           </span>
         </td>
 
         {/* Company */}
-        <td className="py-3 pr-4 min-w-[140px]">
+        <td className="py-3 pr-3 align-middle" style={{ minWidth: "130px" }}>
           <div className="flex items-center gap-2">
             <span className="text-lg leading-none">{company.flag}</span>
             <div>
@@ -235,8 +242,8 @@ function CompanyRow({
           </div>
         </td>
 
-        {/* Price (USD) */}
-        <td className="py-3 pr-4 text-right hidden sm:table-cell">
+        {/* Price (USD) — hidden on mobile */}
+        <td className="py-3 pr-3 text-right align-middle hidden sm:table-cell">
           <div className="font-mono text-sm text-foreground tabular-nums">
             {company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"}
           </div>
@@ -245,8 +252,16 @@ function CompanyRow({
           </div>
         </td>
 
+        {/* Mkt Cap (FD) — hidden on mobile */}
+        <td className={`py-3 pr-3 text-right align-middle hidden sm:table-cell ${sortBy === "mktCap" ? "text-btc" : ""}`}>
+          <span className="font-mono text-sm tabular-nums font-semibold">
+            {fmtUsd(company.fdMarketCapUsd, true)}
+          </span>
+          <div className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">FD</div>
+        </td>
+
         {/* BTC Held */}
-        <td className="py-3 pr-4 text-right">
+        <td className={`py-3 pr-3 text-right align-middle ${sortBy === "btc" ? "text-btc" : ""}`}>
           <span className="font-mono text-sm font-semibold text-btc tabular-nums">
             {fmtBtc(company.btcHeld)}
           </span>
@@ -255,25 +270,25 @@ function CompanyRow({
           </span>
         </td>
 
-        {/* BTC/Share */}
-        <td className="py-3 pr-4 text-right hidden md:table-cell">
+        {/* BTC/Share — hidden on mobile and sm */}
+        <td className={`py-3 pr-3 text-right align-middle hidden md:table-cell ${sortBy === "btcPerShare" ? "text-btc" : ""}`}>
           <span className="font-mono text-xs text-muted-foreground tabular-nums">
             {fmtSats(company.btcPerShareSats)}
           </span>
         </td>
 
-        {/* mNAV */}
-        <td className="py-3 pr-4 text-right hidden sm:table-cell">
+        {/* mNAV — hidden on mobile */}
+        <td className={`py-3 pr-3 text-right align-middle hidden sm:table-cell ${sortBy === "mnav" ? "ring-0" : ""}`}>
           <MNavBadge value={company.mNavEv} />
         </td>
 
-        {/* Risk */}
-        <td className="py-3 pr-4 text-right hidden sm:table-cell">
+        {/* Risk — hidden on mobile */}
+        <td className="py-3 pr-3 text-right align-middle hidden sm:table-cell">
           <RiskBadge label={company.riskLabel} />
         </td>
 
-        {/* Expand */}
-        <td className="py-3 pr-3 text-right w-8">
+        {/* Expand chevron */}
+        <td className="py-3 pr-3 text-right align-middle w-8">
           {expanded
             ? <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />
             : <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" />
@@ -284,7 +299,7 @@ function CompanyRow({
       {/* Expanded detail row */}
       {expanded && (
         <tr className="border-b border-border bg-card/30">
-          <td colSpan={8} className="px-4 py-4">
+          <td colSpan={9} className="px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <DetailStat label="Market Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
               <DetailStat
@@ -352,6 +367,8 @@ function CompanyRow({
 
             {/* Mobile-only fields */}
             <div className="sm:hidden grid grid-cols-2 gap-3 mb-4">
+              <DetailStat label="Price (USD)" value={company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"} />
+              <DetailStat label="Mkt Cap (FD)" value={fmtUsd(company.fdMarketCapUsd, true)} />
               <DetailStat label="24h Change" value={chg.text} valueClass={chg.up ? "text-up" : "text-down"} />
               <DetailStat label="mNAV (EV)" value={company.mNavEv !== null ? `${company.mNavEv.toFixed(2)}x` : "—"} />
             </div>
@@ -433,24 +450,29 @@ function DetailStat({
 
 function TableSkeleton() {
   return (
-    <div className="space-y-0">
+    <tbody>
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="border-b border-border py-4 px-4 flex items-center gap-4">
-          <div className="skeleton w-6 h-7 rounded" />
-          <div className="flex items-center gap-2 flex-1">
-            <div className="skeleton w-7 h-7 rounded-full" />
-            <div className="space-y-1.5">
-              <div className="skeleton w-24 h-4 rounded" />
-              <div className="skeleton w-14 h-3 rounded" />
+        <tr key={i} className="border-b border-border">
+          <td className="py-4 pl-4 pr-2 w-10"><div className="skeleton w-6 h-7 rounded" /></td>
+          <td className="py-4 pr-3" style={{ minWidth: "130px" }}>
+            <div className="flex items-center gap-2">
+              <div className="skeleton w-7 h-7 rounded-full" />
+              <div className="space-y-1.5">
+                <div className="skeleton w-24 h-4 rounded" />
+                <div className="skeleton w-14 h-3 rounded" />
+              </div>
             </div>
-          </div>
-          <div className="skeleton w-20 h-5 rounded ml-auto" />
-          <div className="skeleton w-24 h-5 rounded hidden sm:block" />
-          <div className="skeleton w-14 h-5 rounded hidden sm:block" />
-          <div className="skeleton w-14 h-5 rounded hidden sm:block" />
-        </div>
+          </td>
+          <td className="py-4 pr-3 hidden sm:table-cell"><div className="skeleton w-20 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3 hidden sm:table-cell"><div className="skeleton w-16 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3"><div className="skeleton w-24 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3 hidden md:table-cell"><div className="skeleton w-16 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3 hidden sm:table-cell"><div className="skeleton w-14 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3 hidden sm:table-cell"><div className="skeleton w-14 h-5 rounded ml-auto" /></td>
+          <td className="py-4 pr-3 w-8" />
+        </tr>
       ))}
-    </div>
+    </tbody>
   );
 }
 
@@ -584,6 +606,16 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
 }
 
 // -
+
+type SortKey = "btc" | "mnav" | "btcPerShare" | "mktCap";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  btc: "BTC Held",
+  mnav: "mNAV",
+  btcPerShare: "BTC/Share",
+  mktCap: "Mkt Cap",
+};
+
 export default function Home() {
   const { data, isLoading, error, refetch, isFetching } = trpc.treasury.getData.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -599,7 +631,7 @@ export default function Home() {
     setDisclaimerAccepted(true);
   };
 
-  const [sortBy, setSortBy] = useState<"btc" | "mnav" | "btcPerShare">("btc");
+  const [sortBy, setSortBy] = useState<SortKey>("btc");
   const lastUpdatedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -609,8 +641,9 @@ export default function Home() {
   const sortedCompanies = data?.companies
     ? [...data.companies].sort((a, b) => {
         if (sortBy === "btc")        return b.btcHeld - a.btcHeld;
-        if (sortBy === "mnav")        return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
+        if (sortBy === "mnav")       return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
         if (sortBy === "btcPerShare") return (b.btcPerShareSats ?? 0) - (a.btcPerShareSats ?? 0);
+        if (sortBy === "mktCap")     return (b.fdMarketCapUsd ?? 0) - (a.fdMarketCapUsd ?? 0);
         return 0;
       })
     : [];
@@ -672,9 +705,9 @@ export default function Home() {
         <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest mb-3">Bitcoin Treasury Watchlist</h2>
 
         {/* Sort controls */}
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-xs text-muted-foreground">Sort by:</span>
-          {(["btc", "mnav", "btcPerShare"] as const).map(s => (
+          {(Object.keys(SORT_LABELS) as SortKey[]).map(s => (
             <button
               key={s}
               onClick={() => setSortBy(s)}
@@ -684,57 +717,64 @@ export default function Home() {
                   : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
               }`}
             >
-              {s === "btc" ? "BTC Held" : s === "mnav" ? "mNAV" : "BTC/Share"}
+              {SORT_LABELS[s]}
             </button>
           ))}
         </div>
 
-        {/* Table */}
-        <div className="border border-border rounded-lg overflow-hidden">
-          {/* Table header */}
-          <div className="bg-card border-b border-border">
-            <table className="w-full">
-              <thead>
-                <tr className="text-xs text-muted-foreground font-medium">
-                  <th className="py-2.5 pl-4 pr-2 text-left w-10">#</th>
-                  <th className="py-2.5 pr-4 text-left">Company</th>
-                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">Price (USD)</th>
-                  <th className="py-2.5 pr-4 text-right">BTC Held</th>
-                  <th className="py-2.5 pr-4 text-right hidden md:table-cell">BTC/Share</th>
-                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">
-                    <span className="inline-flex items-center justify-end">
-                      mNAV
-                      <InfoTip>
-                        <p className="font-mono text-xs font-semibold">mNAV(EV) = (FD Market Cap + Net Debt) ÷ BTC Treasury Value</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Enterprise Value premium over BTC NAV. 1.0x = fair value.</p>
-                      </InfoTip>
-                    </span>
-                  </th>
-                  <th className="py-2.5 pr-4 text-right hidden sm:table-cell">
-                    <span className="inline-flex items-center justify-end">
-                      Risk
-                      <InfoTip>
-                        <p className="font-mono text-xs font-semibold">BTC Coverage = BTC Treasury ÷ Total Debt</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">≥5x LOW · 2–5x MOD · 1–2x HIGH · &lt;1x CRIT · No debt NONE</p>
-                      </InfoTip>
-                    </span>
-                  </th>
-                  <th className="py-2.5 pr-3 w-8" />
-                </tr>
-              </thead>
-            </table>
-          </div>
+        {/* ── Unified table: thead + tbody in one <table> so columns always align ── */}
+        <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-card border-b border-border text-xs text-muted-foreground font-medium">
+                <th className="py-2.5 pl-4 pr-2 text-left w-10">#</th>
+                <th className="py-2.5 pr-3 text-left" style={{ minWidth: "130px" }}>Company</th>
+                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">Price (USD)</th>
+                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">
+                  <span className="inline-flex items-center justify-end">
+                    Mkt Cap
+                    <InfoTip>
+                      <p className="font-mono text-xs font-semibold">Market Cap = Fully Diluted Shares × Price (USD)</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Fully diluted includes all shares, options, and convertible instruments.</p>
+                    </InfoTip>
+                  </span>
+                </th>
+                <th className="py-2.5 pr-3 text-right">BTC Held</th>
+                <th className="py-2.5 pr-3 text-right hidden md:table-cell">BTC/Share</th>
+                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">
+                  <span className="inline-flex items-center justify-end">
+                    mNAV
+                    <InfoTip>
+                      <p className="font-mono text-xs font-semibold">mNAV(EV) = (FD Market Cap + Net Debt) ÷ BTC Treasury Value</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Enterprise Value premium over BTC NAV. 1.0x = fair value.</p>
+                    </InfoTip>
+                  </span>
+                </th>
+                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">
+                  <span className="inline-flex items-center justify-end">
+                    Risk
+                    <InfoTip>
+                      <p className="font-mono text-xs font-semibold">BTC Coverage = BTC Treasury ÷ Total Debt</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">≥5x LOW · 2–5x MOD · 1–2x HIGH · &lt;1x CRIT · No debt NONE</p>
+                    </InfoTip>
+                  </span>
+                </th>
+                <th className="py-2.5 pr-3 w-8" />
+              </tr>
+            </thead>
 
-          {/* Table body */}
-          {isLoading ? (
-            <TableSkeleton />
-          ) : error ? (
-            <div className="py-12 text-center text-muted-foreground">
-              <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-risk-high" />
-              <p className="text-sm">Failed to load data. Please refresh.</p>
-            </div>
-          ) : (
-            <table className="w-full">
+            {isLoading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <tbody>
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-risk-high" />
+                    <p className="text-sm">Failed to load data. Please refresh.</p>
+                  </td>
+                </tr>
+              </tbody>
+            ) : (
               <tbody>
                 {sortedCompanies.map((company, i) => (
                   <CompanyRow
@@ -742,11 +782,12 @@ export default function Home() {
                     company={company}
                     rank={i + 1}
                     disclosures={data?.disclosures ?? []}
+                    sortBy={sortBy}
                   />
                 ))}
               </tbody>
-            </table>
-          )}
+            )}
+          </table>
         </div>
 
         {/* Disclosure feed */}

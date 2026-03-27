@@ -89,3 +89,9 @@
 - [x] Add meta keywords tag to index.html
 - [x] Add H1 heading: header brand “BTC Treasury” promoted to <h1>
 - [x] Add H2 heading: “Bitcoin Treasury Watchlist” above the table
+
+## UI Fixes (Round 11)
+- [x] Table header alignment: fix column width/padding mismatch so headers align with data rows
+- [ ] Mobile sort UX: when sort is changed, show the active sort column prominently (first visible data column after Company)
+- [x] Add Market Cap (FD) column: Price × FD Shares, compact format ($xB), visible on sm+ screens
+- [x] Add "Mkt Cap" sort option to sort controls
