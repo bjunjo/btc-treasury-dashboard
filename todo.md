@@ -63,3 +63,8 @@
 
 ## Data Fixes (Round 1)
 - [x] Strategy MSTR: pull live btcHeld from strategy.com API (762,099 confirmed LIVE)
+
+## Exchange Disclosures (Round 2)
+- [x] SEC EDGAR: fetch latest 8-K/SC 13G filings for Strategy (MSTR, CIK 0001050446)
+- [x] SEC EDGAR: fetch latest 8-K filings for Nakamoto Inc. (NAKA)
+- [x] Add MSTR and NAKA tabs to DisclosureFeed company filter (tabs are auto-generated from disclosure data)

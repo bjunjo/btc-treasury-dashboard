@@ -393,7 +393,91 @@ async function fetchMfnDisclosures(): Promise<Disclosure[]> {
   return disclosures;
 }
 
-// ── Risk Label ────────────────────────────────────────────────────────────────
+// ── SEC EDGAR Disclosures (Strategy + Nakamoto) ────────────────────────────────────────
+
+// Map of SEC 8-K item codes to human-readable descriptions
+const EDGAR_ITEM_LABELS: Record<string, string> = {
+  "1.01": "Entry into Material Agreement",
+  "1.02": "Termination of Material Agreement",
+  "2.01": "Completion of Acquisition or Disposition",
+  "2.02": "Results of Operations (Earnings)",
+  "2.03": "Creation of Direct Financial Obligation",
+  "3.02": "Unregistered Sales of Equity Securities",
+  "5.02": "Departure/Appointment of Directors or Officers",
+  "5.03": "Amendments to Articles of Incorporation",
+  "7.01": "Regulation FD Disclosure",
+  "8.01": "Other Events",
+  "9.01": "Financial Statements and Exhibits",
+};
+
+function edgarItemsToTitle(items: string, company: string): string {
+  const codes = items.split(",").map(s => s.trim()).filter(Boolean);
+  // BTC purchase filings for Strategy are always 8.01 + 7.01
+  const isBtcPurchase = codes.includes("8.01") && (codes.includes("7.01") || codes.includes("9.01"));
+  if (isBtcPurchase && company === "Strategy") return "Bitcoin Purchase Disclosure";
+  // Pick the most descriptive item (exclude 9.01 which is just exhibits)
+  const meaningful = codes.filter(c => c !== "9.01");
+  if (meaningful.length === 0) return "SEC Filing (8-K)";
+  const primary = meaningful[0]!;
+  return EDGAR_ITEM_LABELS[primary] ?? `SEC 8-K (Item ${primary})`;
+}
+
+async function fetchSecEdgarDisclosures(
+  company: string,
+  cik: string,
+  exchange: string
+): Promise<Disclosure[]> {
+  const disclosures: Disclosure[] = [];
+  try {
+    const res = await axios.get(
+      `https://data.sec.gov/submissions/${cik}.json`,
+      {
+        timeout: 10000,
+        headers: {
+          "User-Agent": "btc-treasury-dashboard contact@example.com",
+          Accept: "application/json",
+        },
+      }
+    );
+    const recent = res.data?.filings?.recent ?? {};
+    const forms: string[] = recent.form ?? [];
+    const dates: string[] = recent.filingDate ?? [];
+    const accessions: string[] = recent.accessionNumber ?? [];
+    const items: string[] = recent.items ?? [];
+    const docs: string[] = recent.primaryDocument ?? [];
+    const cikNum = cik.replace("CIK", "").replace(/^0+/, "");
+
+    let count = 0;
+    for (let i = 0; i < forms.length && count < 5; i++) {
+      if (forms[i] !== "8-K") continue;
+      const acc = accessions[i]!;
+      const date = dates[i]!;
+      const itemStr = items[i] ?? "";
+      const doc = docs[i] ?? "";
+      const accClean = acc.replace(/-/g, "");
+      const url = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${accClean}/${doc}`;
+      const title = edgarItemsToTitle(itemStr, company);
+      const isBtc = /bitcoin|btc/i.test(title) || (company === "Strategy" && itemStr.includes("8.01"));
+      disclosures.push({
+        company,
+        exchange,
+        date,
+        title,
+        isBtc,
+        isInsideInfo: false,
+        pdfUrl: null,
+        source: "Tier0-SEC-EDGAR",
+        url,
+      });
+      count++;
+    }
+  } catch {
+    // silent fail
+  }
+  return disclosures;
+}
+
+// ── Risk Label ──────────────────────────────────────────────────────────────────────────────────
 
 function getRiskLabel(coverage: number | null, debtUsd: number): CompanyData["riskLabel"] {
   if (debtUsd === 0) return "NONE";
@@ -413,12 +497,14 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
   }
 
   // Fetch all data in parallel
-  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures] = await Promise.all([
+  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures] = await Promise.all([
     fetchFxRates(),
     fetchStockPrices(TICKER_ORDER),
     fetchTdnetDisclosures(),
     fetchLseDisclosure(),
     fetchMfnDisclosures(),
+    fetchSecEdgarDisclosures("Strategy", "CIK0001050446", "Nasdaq / SEC EDGAR"),
+    fetchSecEdgarDisclosures("Nakamoto Inc.", "CIK0001946573", "Nasdaq / SEC EDGAR"),
   ]);
 
   const btc = await fetchBtcPrice(fx);
@@ -507,8 +593,10 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
   // Sort by BTC held descending
   companies.sort((a, b) => b.btcHeld - a.btcHeld);
 
-  // Assemble disclosures
+  // Assemble disclosures (sorted by date descending within each company)
   const disclosures: Disclosure[] = [
+    ...mstrEdgarDisclosures,
+    ...nakaEdgarDisclosures,
     ...tdnetDisclosures,
     ...(lseDisclosure ? [lseDisclosure] : []),
     ...mfnDisclosures,
