@@ -212,33 +212,85 @@ async function fetchStockPrices(tickers: string[]): Promise<Record<string, { pri
 }
 
 // ── MSTR live data from strategy.com API ────────────────────────────────────
+// Source hierarchy (world-class standard):
+//   Tier 0: strategy.com official API  — authoritative, updated every market close
+//   Tier 1: Hardcoded fallback         — last known good values
+//
+// mstrKpiData endpoint returns:
+//   marketCap (millions USD) — Basic shares × price, updated daily by strategy.com
+//   entVal    (millions USD) — Enterprise Value = Market Cap + Debt + Preferred − Cash
+//   debt      (millions USD) — total debt
+//   pref      (millions USD) — preferred stock (STRK + STRF)
+//
+// bitcoinKpis endpoint returns:
+//   btcHoldings — live BTC count
+//   debtPrefByBN — (debt+pref) as % of BTC NAV (used only as cross-check)
 
 interface MstrLiveData {
   btcHeld: number;
+  marketCapUsd: number | null;   // live from mstrKpiData
+  evUsd: number | null;          // live enterprise value from mstrKpiData
   debtUsd: number;
+  prefUsd: number;               // preferred stock value
   cashUsd: number;
 }
 
-async function fetchMstrLiveData(btcUsd: number): Promise<MstrLiveData> {
+async function fetchMstrLiveData(): Promise<MstrLiveData> {
+  const fallback: MstrLiveData = {
+    btcHeld: HARDCODED.MSTR.btc,
+    marketCapUsd: null,
+    evUsd: null,
+    debtUsd: HARDCODED.MSTR.debtUsd,
+    prefUsd: 0,
+    cashUsd: HARDCODED.MSTR.cashUsd,
+  };
+
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Origin": "https://www.strategy.com",
+    "Referer": "https://www.strategy.com/",
+  };
+
   try {
-    const res = await axios.get("https://api.strategy.com/btc/bitcoinKpis", {
-      timeout: 8000,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Origin": "https://www.strategy.com",
-        "Referer": "https://www.strategy.com/",
-      },
-    });
-    const r = res.data?.results ?? {};
-    // btcHoldings is returned as a formatted string like "762,099"
-    const btcHeld = parseInt(String(r.btcHoldings ?? "").replace(/,/g, ""), 10) || HARDCODED.MSTR.btc;
-    // debtPrefByBN is the % of BTC NAV represented by debt + preferred (conservative)
-    const debtPrefPct = parseFloat(r.debtPrefByBN ?? "35") / 100;
-    const btcNav = btcHeld * btcUsd;
-    const debtUsd = btcNav * debtPrefPct;
-    return { btcHeld, debtUsd, cashUsd: 0 };
+    // Fetch both endpoints in parallel
+    const [kpisRes, mstrRes] = await Promise.allSettled([
+      axios.get("https://api.strategy.com/btc/bitcoinKpis", { timeout: 8000, headers }),
+      axios.get("https://api.strategy.com/btc/mstrKpiData", { timeout: 8000, headers }),
+    ]);
+
+    // Parse BTC holdings from bitcoinKpis
+    let btcHeld = HARDCODED.MSTR.btc;
+    if (kpisRes.status === "fulfilled") {
+      const r = kpisRes.value.data?.results ?? {};
+      const parsed = parseInt(String(r.btcHoldings ?? "").replace(/,/g, ""), 10);
+      if (!isNaN(parsed) && parsed > 0) btcHeld = parsed;
+    }
+
+    // Parse market cap, EV, debt, preferred from mstrKpiData
+    // All values are in millions USD as formatted strings (e.g. "45,940")
+    let marketCapUsd: number | null = null;
+    let evUsd: number | null = null;
+    let debtUsd = HARDCODED.MSTR.debtUsd;
+    let prefUsd = 0;
+    if (mstrRes.status === "fulfilled") {
+      const row = Array.isArray(mstrRes.value.data) ? mstrRes.value.data[0] : null;
+      if (row) {
+        const parseMil = (s: string | undefined) =>
+          s ? parseFloat(s.replace(/,/g, "")) * 1_000_000 : null;
+        const mc = parseMil(row.marketCap);
+        const ev = parseMil(row.entVal);
+        const debt = parseMil(row.debt);
+        const pref = parseMil(row.pref);
+        if (mc && mc > 0) marketCapUsd = mc;
+        if (ev && ev > 0) evUsd = ev;
+        if (debt && debt > 0) debtUsd = debt;
+        if (pref && pref > 0) prefUsd = pref;
+      }
+    }
+
+    return { btcHeld, marketCapUsd, evUsd, debtUsd, prefUsd, cashUsd: 0 };
   } catch {
-    return { btcHeld: HARDCODED.MSTR.btc, debtUsd: HARDCODED.MSTR.debtUsd, cashUsd: HARDCODED.MSTR.cashUsd };
+    return fallback;
   }
 }
 
@@ -538,16 +590,22 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     let change24h = stock?.change ?? null;
     const priceConfidence: CompanyData["priceConfidence"] = stock ? "LIVE" : "HARDCODED";
 
-    // MSTR: pull live btcHeld + debt from strategy.com API
+    // MSTR: pull live data from strategy.com API (world-class standard: authoritative source first)
     let debtUsd = hc.debtUsd;
     let cashUsd = hc.cashUsd;
     let liveBtcHeld = hc.btc;
+    let liveMarketCapUsd: number | null = null;  // from mstrKpiData (Basic shares × price)
+    let liveEvUsd: number | null = null;          // from mstrKpiData (EV = MC + debt + pref)
+    let livePrefUsd = 0;
     let btcConfidence: CompanyData["btcConfidence"] = "HARDCODED";
-    if (ticker === "MSTR" && btc.usd) {
-      const mstrLive = await fetchMstrLiveData(btc.usd);
+    if (ticker === "MSTR") {
+      const mstrLive = await fetchMstrLiveData();
       liveBtcHeld = mstrLive.btcHeld;
       debtUsd = mstrLive.debtUsd;
       cashUsd = mstrLive.cashUsd;
+      liveMarketCapUsd = mstrLive.marketCapUsd;
+      liveEvUsd = mstrLive.evUsd;
+      livePrefUsd = mstrLive.prefUsd;
       btcConfidence = "LIVE";
     }
 
@@ -555,14 +613,20 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     const sharesDiluted = hc.sharesDiluted;
     const btcTreasuryUsd = btcHeld * btc.usd;
     const netDebtUsd = debtUsd - cashUsd;
-    const fdMarketCapUsd = priceUsd && sharesDiluted ? priceUsd * sharesDiluted : null;
+
+    // Market cap: use live API value for MSTR (Basic shares × price from strategy.com),
+    // fall back to Price × hardcoded FD shares for other companies.
+    const fdMarketCapUsd = liveMarketCapUsd ?? (priceUsd && sharesDiluted ? priceUsd * sharesDiluted : null);
+
     const btcPerShare = sharesDiluted > 0 ? btcHeld / sharesDiluted : null;
     const btcPerShareSats = btcPerShare ? btcPerShare * 1e8 : null;
 
+    // mNAV: use live EV from strategy.com API for MSTR (most accurate).
+    // For others: EV = FD Market Cap + Net Debt (standard formula).
     let mNavEv: number | null = null;
-    if (fdMarketCapUsd && btcTreasuryUsd > 0) {
-      const ev = fdMarketCapUsd + netDebtUsd;
-      mNavEv = ev / btcTreasuryUsd;
+    if (btcTreasuryUsd > 0) {
+      const ev = liveEvUsd ?? (fdMarketCapUsd ? fdMarketCapUsd + netDebtUsd : null);
+      if (ev) mNavEv = ev / btcTreasuryUsd;
     }
 
     const btcCoverage = debtUsd > 0 ? btcTreasuryUsd / debtUsd : null;

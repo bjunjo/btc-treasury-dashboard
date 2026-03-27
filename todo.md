@@ -90,6 +90,12 @@
 - [x] Add H1 heading: header brand “BTC Treasury” promoted to <h1>
 - [x] Add H2 heading: “Bitcoin Treasury Watchlist” above the table
 
+## Data Quality (Round 2) — World-class standard
+- [x] MSTR: pull live marketCap and entVal (EV) from strategy.com mstrKpiData API (not Price × hardcoded shares)
+- [x] MSTR: use live EV from API for mNAV calculation (replaces FD Market Cap + Net Debt formula)
+- [x] MSTR: use live debt + pref from API for debt coverage calculation
+- [ ] Add confidence label: show which fields are LIVE vs HARDCODED in expanded detail panel
+
 ## UI Fixes (Round 11)
 - [x] Table header alignment: fix column width/padding mismatch so headers align with data rows
 - [ ] Mobile sort UX: when sort is changed, show the active sort column prominently (first visible data column after Company)
