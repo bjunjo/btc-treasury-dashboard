@@ -74,3 +74,7 @@
 
 ## Bug Fixes (Round 1)
 - [x] H100 MFN disclosures: fix broken/null URL so items are clickable
+
+## Legal Protection
+- [x] Footer: persistent legal disclaimer (no investment advice, personal use only, data accuracy not guaranteed)
+- [x] First-visit modal: user must acknowledge disclaimer before viewing data

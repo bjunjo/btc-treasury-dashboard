@@ -1,8 +1,48 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin } from "lucide-react";
+import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin, ShieldAlert } from "lucide-react";
 import type { CompanyData, Disclosure, TreasuryData } from "../../../server/treasury";
+
+// -
+
+// ── Legal Disclaimer Modal ────────────────────────────────────────────────────
+
+const DISCLAIMER_KEY = "btc_treasury_disclaimer_v1";
+
+function DisclaimerModal({ onAccept }: { onAccept: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-card border border-border rounded-xl max-w-lg w-full p-6 shadow-2xl">
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldAlert className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+          <h2 className="font-mono text-sm font-bold text-foreground">Legal Disclaimer</h2>
+        </div>
+        <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+          <p>
+            <span className="text-foreground font-semibold">For personal informational use only.</span>{" "}
+            This dashboard is a private research tool and does not constitute financial advice, investment advice, trading advice, or any other form of advice.
+          </p>
+          <p>
+            Nothing on this site should be construed as a recommendation to buy, sell, or hold any security, cryptocurrency, or other financial instrument. All data is sourced from third-party APIs and public filings and may be delayed, inaccurate, or incomplete.
+          </p>
+          <p>
+            <span className="text-foreground font-semibold">No warranty is given</span> as to the accuracy, completeness, or timeliness of the information displayed. The creator of this tool accepts no liability whatsoever for any loss or damage arising from reliance on this data.
+          </p>
+          <p>
+            By continuing, you confirm that you are accessing this tool for personal research purposes only and that you will not rely on it for any financial or investment decisions.
+          </p>
+        </div>
+        <button
+          onClick={onAccept}
+          className="mt-5 w-full py-2.5 rounded-lg bg-btc text-black font-mono text-xs font-bold hover:bg-btc/90 transition-colors"
+        >
+          I understand — Continue to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // -
 
@@ -544,12 +584,20 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
 }
 
 // -
-
 export default function Home() {
   const { data, isLoading, error, refetch, isFetching } = trpc.treasury.getData.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 55_000,
   });
+
+  // Disclaimer: show modal on first visit, persist acceptance in localStorage
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState<boolean>(() => {
+    try { return localStorage.getItem(DISCLAIMER_KEY) === "1"; } catch { return false; }
+  });
+  const handleAcceptDisclaimer = () => {
+    try { localStorage.setItem(DISCLAIMER_KEY, "1"); } catch { /* noop */ }
+    setDisclaimerAccepted(true);
+  };
 
   const [sortBy, setSortBy] = useState<"btc" | "mnav" | "btcPerShare">("btc");
   const lastUpdatedRef = useRef<string | null>(null);
@@ -571,7 +619,9 @@ export default function Home() {
   const totalTreasuryUsd = data?.companies.reduce((s, c) => s + (c.btcTreasuryUsd ?? 0), 0) ?? 0;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <>
+      {!disclaimerAccepted && <DisclaimerModal onAccept={handleAcceptDisclaimer} />}
+      <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container py-3 flex items-center justify-between gap-4">
@@ -700,16 +750,29 @@ export default function Home() {
         {data && <DisclosureFeed disclosures={data.disclosures} companies={data.companies} />}
 
         {/* Footer */}
-        <div className="mt-8 pt-4 border-t border-border flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-muted-foreground">
-            Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com
+        <div className="mt-8 pt-4 border-t border-border space-y-3">
+          {/* Disclaimer strip */}
+          <div className="flex items-start gap-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg px-3 py-2.5">
+            <ShieldAlert className="w-3.5 h-3.5 text-yellow-500/70 flex-shrink-0 mt-0.5" />
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <span className="text-yellow-500/80 font-semibold">Disclaimer:</span>{" "}
+              For personal informational use only. Not financial or investment advice. Data may be delayed or inaccurate.
+              The creator accepts no liability for decisions made based on this information.
+              Always consult a qualified financial professional before making investment decisions.
+            </p>
           </div>
-          <div className="text-xs text-muted-foreground font-mono">
-            Auto-refreshes every 60s
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR
+            </div>
+            <div className="text-xs text-muted-foreground font-mono">
+              Auto-refreshes every 60s
+            </div>
           </div>
         </div>
       </main>
     </div>
+    </>
   );
 }
 
