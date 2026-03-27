@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { RefreshCw, TrendingDown, TrendingUp, AlertTriangle, Info, ChevronDown, ChevronUp, Bitcoin } from "lucide-react";
 import type { CompanyData, Disclosure, TreasuryData } from "../../../server/treasury";
 
-// ── InfoTip ───────────────────────────────────────────────────────────────────
+// -
 
 function InfoTip({ children }: { children: React.ReactNode }) {
   return (
@@ -24,7 +24,7 @@ function InfoTip({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// -
 
 function fmtUsd(n: number | null, compact = false): string {
   if (n === null || n === undefined) return "—";
@@ -56,7 +56,7 @@ function fmtFx(label: string, value: number, prefix: string, decimals = 2): stri
   return `${label}: ${prefix}${value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
-// ── Risk Badge ────────────────────────────────────────────────────────────────
+// -
 
 function RiskBadge({ label }: { label: CompanyData["riskLabel"] }) {
   const styles: Record<string, string> = {
@@ -73,7 +73,7 @@ function RiskBadge({ label }: { label: CompanyData["riskLabel"] }) {
   );
 }
 
-// ── mNAV Badge ────────────────────────────────────────────────────────────────
+// -
 
 function MNavBadge({ value }: { value: number | null }) {
   if (value === null) return <span className="text-muted-foreground font-mono text-sm">—</span>;
@@ -85,9 +85,9 @@ function MNavBadge({ value }: { value: number | null }) {
   return <span className={`font-mono text-sm tabular-nums font-semibold ${cls}`}>{value.toFixed(2)}x</span>;
 }
 
-// ── FX Rate Bar ───────────────────────────────────────────────────────────────
+// -
 
-function FxBar({ fx }: { fx: TreasuryData["fx"] }) {
+function FxBar({ fx, kimchiPremium }: { fx: TreasuryData["fx"]; kimchiPremium: number | null }) {
   const items = [
     fmtFx("USD/KRW", fx.usdKrw, "₩", 0),
     fmtFx("USD/JPY", fx.usdJpy, "¥", 2),
@@ -98,19 +98,27 @@ function FxBar({ fx }: { fx: TreasuryData["fx"] }) {
   return (
     <div className="border-b border-border bg-card/50">
       <div className="container py-1.5">
-        <div className="flex flex-wrap gap-x-5 gap-y-1">
+        <div className="flex flex-wrap gap-x-5 gap-y-1 items-center">
           {items.map((item, i) => (
             <span key={i} className="font-mono text-xs text-muted-foreground tabular-nums">
               {item}
             </span>
           ))}
+          {kimchiPremium !== null && (
+            <span className="font-mono text-xs text-muted-foreground/60 tabular-nums">
+              Kimchi{" "}
+              <span className={kimchiPremium >= 0 ? "text-up" : "text-down"}>
+                {kimchiPremium >= 0 ? "+" : ""}{kimchiPremium.toFixed(2)}%
+              </span>
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ── BTC Ticker Strip ──────────────────────────────────────────────────────────
+// -
 
 function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
   const { text, up } = fmtPct(btc.change24h);
@@ -134,35 +142,10 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
           </div>
         </div>
 
-        {/* Right: BTC-KRW + kimchi emoji */}
+        {/* Right: BTC-KRW price */}
         {btc.krwUpbit && (
           <div className="text-right">
-            <div className="flex items-center justify-end gap-1.5">
-              <span className="font-mono text-xs text-muted-foreground">BTC-KRW</span>
-              {btc.kimchiPremium !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex items-center gap-0.5 cursor-help">
-                      <span className="text-base leading-none select-none">🥬</span>
-                      <span
-                        className={`font-mono tabular-nums leading-none ${
-                          btc.kimchiPremium >= 0 ? "text-up" : "text-down"
-                        }`}
-                        style={{ fontSize: "11px" }}
-                      >
-                        {btc.kimchiPremium >= 0 ? "+" : ""}{btc.kimchiPremium.toFixed(2)}%
-                      </span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p className="font-mono text-xs font-semibold">Kimchi Premium</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Upbit KRW price vs USD price × FX rate
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
+            <div className="font-mono text-xs text-muted-foreground">BTC-KRW</div>
             <div className="font-mono text-sm text-foreground tabular-nums">
               ₩{btc.krwUpbit.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </div>
@@ -173,7 +156,7 @@ function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
   );
 }
 
-// ── Company Row ───────────────────────────────────────────────────────────────
+// -
 
 function CompanyRow({
   company,
@@ -406,7 +389,7 @@ function DetailStat({
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// -
 
 function TableSkeleton() {
   return (
@@ -431,58 +414,136 @@ function TableSkeleton() {
   );
 }
 
-// ── Disclosure Feed ────────────────────────────────────────────────────────────
+// -
 
-function DisclosureFeed({ disclosures }: { disclosures: Disclosure[] }) {
+// Exchange badge colours
+const EXCHANGE_STYLE: Record<string, string> = {
+  TDnet:  "bg-red-900/30 text-red-400 border-red-800/40",
+  "LSE/RNS": "bg-blue-900/30 text-blue-400 border-blue-800/40",
+  MFN:    "bg-purple-900/30 text-purple-400 border-purple-800/40",
+  SEC:    "bg-green-900/30 text-green-400 border-green-800/40",
+};
+
+function ExchangeBadge({ source }: { source: string }) {
+  const cls = EXCHANGE_STYLE[source] ?? "bg-card text-muted-foreground border-border";
+  return (
+    <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border flex-shrink-0 ${cls}`}>
+      {source}
+    </span>
+  );
+}
+
+function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[]; companies: CompanyData[] }) {
+  const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("All");
+
   if (disclosures.length === 0) return null;
+
+  // Build tab list from companies that have disclosures
+  const tabs = ["All", ...companies
+    .filter(c => disclosures.some(d => d.company === c.name))
+    .map(c => c.name)
+  ];
+
+  const filtered = activeTab === "All"
+    ? disclosures
+    : disclosures.filter(d => d.company === activeTab);
+
   return (
     <div className="mt-6 border border-border rounded-lg overflow-hidden">
-      <div className="bg-card px-4 py-3 border-b border-border flex items-center gap-2">
-        <Info className="w-4 h-4 text-btc" />
+      {/* Header — always visible, click to toggle */}
+      <button
+        className="w-full bg-card px-4 py-3 border-b border-border flex items-center gap-2 hover:bg-card/80 transition-colors text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <Info className="w-4 h-4 text-btc flex-shrink-0" />
         <span className="text-sm font-semibold text-foreground">Exchange Disclosures</span>
-        <span className="text-xs text-muted-foreground ml-1">— legally authoritative filings</span>
-      </div>
-      <div className="divide-y divide-border">
-        {disclosures.slice(0, 8).map((d, i) => (
-          <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-card/50 transition-colors">
-            <span className={`flex-shrink-0 font-bold text-sm w-4 text-center ${d.isBtc ? "text-btc" : "text-transparent"}`}>₿</span>
-            <span className="flex-shrink-0 text-xs font-mono text-btc w-24 truncate">{d.company}</span>
-            <span className="flex-shrink-0 font-mono text-xs text-muted-foreground hidden sm:block w-32">{d.date.slice(0, 16)}</span>
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-              {d.isInsideInfo && <AlertTriangle className="w-3 h-3 text-risk-high flex-shrink-0" />}
-              {d.url ? (
-                <a
-                  href={d.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-foreground hover:text-btc transition-colors truncate"
-                  title={d.title}
-                >
-                  {d.title}
-                </a>
-              ) : (
-                <span className="text-sm text-foreground truncate" title={d.title}>{d.title}</span>
-              )}
-              {d.pdfUrl && (
-                <a
-                  href={d.pdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-shrink-0 text-xs text-btc hover:underline font-mono"
-                  onClick={e => e.stopPropagation()}
-                >
-                  PDF↗
-                </a>
-              )}
-            </div>
+        <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">— legally authoritative filings</span>
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+          {open ? "Hide" : "Show"}
+          {open
+            ? <ChevronUp className="w-3.5 h-3.5" />
+            : <ChevronDown className="w-3.5 h-3.5" />
+          }
+        </span>
+      </button>
+
+      {open && (
+        <>
+          {/* Company tabs */}
+          <div className="bg-card/50 px-4 pt-3 pb-0 flex gap-1.5 flex-wrap border-b border-border">
+            {tabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`text-xs font-mono px-3 py-1.5 rounded-t border-b-2 transition-colors ${
+                  activeTab === tab
+                    ? "border-btc text-btc bg-btc-dim"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+
+          {/* Disclosure rows */}
+          <div className="divide-y divide-border">
+            {filtered.slice(0, 10).map((d, i) => (
+              <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-card/40 transition-colors group">
+                {/* BTC indicator */}
+                <span className={`flex-shrink-0 font-bold text-sm mt-0.5 ${d.isBtc ? "text-btc" : "text-transparent"}`}>₿</span>
+
+                {/* Main content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <ExchangeBadge source={d.source} />
+                    {activeTab === "All" && (
+                      <span className="font-mono text-xs text-muted-foreground/70">{d.company}</span>
+                    )}
+                    <span className="font-mono text-xs text-muted-foreground/60">{d.date.slice(0, 10)}</span>
+                    {d.isInsideInfo && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-risk-high font-mono">
+                        <AlertTriangle className="w-2.5 h-2.5" /> Inside Info
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {d.url ? (
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-foreground hover:text-btc transition-colors leading-snug"
+                        title={d.title}
+                      >
+                        {d.title} <span className="text-muted-foreground/40 text-xs">↗</span>
+                      </a>
+                    ) : (
+                      <span className="text-sm text-foreground leading-snug">{d.title}</span>
+                    )}
+                    {d.pdfUrl && (
+                      <a
+                        href={d.pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 text-[10px] text-btc hover:underline font-mono border border-btc/30 rounded px-1 py-0.5"
+                      >
+                        PDF
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// -
 
 export default function Home() {
   const { data, isLoading, error, refetch, isFetching } = trpc.treasury.getData.useQuery(undefined, {
@@ -543,7 +604,7 @@ export default function Home() {
       {data && <BtcStrip btc={data.btc} />}
 
       {/* FX Rate Bar */}
-      {data && <FxBar fx={data.fx} />}
+      {data && <FxBar fx={data.fx} kimchiPremium={data.btc.kimchiPremium} />}
 
       {/* Main content */}
       <main className="container py-6">
@@ -636,7 +697,7 @@ export default function Home() {
         </div>
 
         {/* Disclosure feed */}
-        {data && <DisclosureFeed disclosures={data.disclosures} />}
+        {data && <DisclosureFeed disclosures={data.disclosures} companies={data.companies} />}
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-border flex flex-wrap items-center justify-between gap-2">

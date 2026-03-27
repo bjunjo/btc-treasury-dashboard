@@ -53,3 +53,10 @@
 ## UX Improvements (Round 7)
 - [x] BTC supply share: show (btcHeld / 21M × 100, 2dp) as small text next to BTC Held in table row
 - [x] BTC supply share: also show in expanded detail panel
+
+## UX Improvements (Round 8)
+- [x] Remove 🥬 kimchi from BTC strip; add kimchi premium as small text in FX bar
+
+## UX Improvements (Round 9)
+- [x] Exchange Disclosures: company tabs (All / Strategy / Metaplanet / SWC / H100)
+- [x] Exchange Disclosures: collapsible section (collapsed by default)- [x] Exchange Disclosures: clean per-company layout -- exchange badge + date + title link only
