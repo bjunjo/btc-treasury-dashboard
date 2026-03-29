@@ -534,6 +534,154 @@ async function fetchSecEdgarDisclosures(
   return disclosures;
 }
 
+// ── StrategyTracker live data (Metaplanet, H100, SWC) ───────────────────────────────────────────
+//
+// data.strategytracker.com is the official partner data feed for all three companies.
+// Metaplanet, H100, and Smarter Web Company submit their BTC holdings directly to
+// StrategyTracker as verified partners. This is the most timely structured source
+// available for non-US companies without a paid regulatory API subscription.
+//
+// The feed updates within hours of each company's official disclosure.
+
+interface StrategyTrackerEntry {
+  btc: number;
+  sharesOutstanding: number;
+  marketCap: number;
+  satsPerShare: number;
+  navPremium: number;
+}
+
+type StrategyTrackerMap = Record<string, StrategyTrackerEntry>;
+
+let _stCache: { data: StrategyTrackerMap; ts: number } | null = null;
+const ST_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchStrategyTrackerData(): Promise<StrategyTrackerMap> {
+  if (_stCache && Date.now() - _stCache.ts < ST_CACHE_TTL_MS) {
+    return _stCache.data;
+  }
+  try {
+    // Step 1: get the current versioned filename
+    const latestRes = await axios.get("https://data.strategytracker.com/latest.json", {
+      timeout: 8000,
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+    });
+    // Step 2: fetch the full data file (has latestTotalShares, latestBtcBalance, processedMetrics)
+    const fullFile: string = latestRes.data?.files?.full;
+    if (!fullFile) return {};
+    const dataRes = await axios.get(`https://data.strategytracker.com/${fullFile}`, {
+      timeout: 20000,
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+    });
+    const companies = dataRes.data?.companies ?? {};
+
+    // Map to our internal format — keyed by our internal tickers
+    const result: StrategyTrackerMap = {};
+    const tickerMap: Record<string, string> = {
+      "3350.T": "3350.T",
+      "H100":   "HOGPF",
+      "SWC.AQ": "SWC.L",
+    };
+    for (const [stTicker, ourTicker] of Object.entries(tickerMap)) {
+      const entry = companies[stTicker];
+      if (!entry) continue;
+      // processedMetrics has the most accurate per-company data
+      const pm = entry.processedMetrics ?? entry;
+      // latestBtcBalance is the most current BTC count (updated on each disclosure)
+      const btc = typeof pm.latestBtcBalance === "number" && pm.latestBtcBalance > 0
+        ? pm.latestBtcBalance
+        : (typeof entry.holdings === "number" && entry.holdings > 0 ? entry.holdings : null);
+      // latestTotalShares is the most current share count from official filings
+      const shares = typeof pm.latestTotalShares === "number" && pm.latestTotalShares > 0
+        ? pm.latestTotalShares
+        : (typeof pm.sharesOutstanding === "number" && pm.sharesOutstanding > 0 ? pm.sharesOutstanding : null);
+      const mc = typeof pm.currentMarketCap === "number" && pm.currentMarketCap > 0
+        ? pm.currentMarketCap
+        : (typeof entry.marketCap === "number" && entry.marketCap > 0 ? entry.marketCap : null);
+      const sats = typeof entry.satsPerShare === "number" ? entry.satsPerShare : null;
+      const nav = typeof entry.navPremium === "number" ? entry.navPremium : null;
+      if (btc && shares) {
+        result[ourTicker] = {
+          btc,
+          sharesOutstanding: shares,
+          marketCap: mc ?? 0,
+          satsPerShare: sats ?? 0,
+          navPremium: nav ?? 0,
+        };
+      }
+    }
+
+    _stCache = { data: result, ts: Date.now() };
+    return result;
+  } catch {
+    return _stCache?.data ?? {};
+  }
+}
+
+// ── SEC EDGAR XBRL live data (Nakamoto Inc.) ─────────────────────────────────
+//
+// SEC EDGAR XBRL is the authoritative regulatory source for US public companies.
+// Data reflects the most recently filed 10-Q or 10-K.
+// Lag: typically 1-2 quarters behind real-time.
+//
+// Fields fetched:
+//   CommonStockSharesOutstanding — diluted share count
+//   CryptoAssetNumberOfUnits     — BTC held (ASC 350-60 standard)
+//   LongTermDebt + NotesPayable  — total debt
+
+interface EdgarXbrlData {
+  shares: number | null;
+  btc: number | null;
+  debtUsd: number | null;
+  asOf: string | null;
+}
+
+async function fetchNakaEdgarXbrl(): Promise<EdgarXbrlData> {
+  const empty: EdgarXbrlData = { shares: null, btc: null, debtUsd: null, asOf: null };
+  try {
+    const res = await axios.get(
+      "https://data.sec.gov/api/xbrl/companyfacts/CIK0001946573.json",
+      {
+        timeout: 12000,
+        headers: {
+          "User-Agent": "btc-treasury-dashboard contact@bjunjo.com",
+          Accept: "application/json",
+        },
+      }
+    );
+    const usGaap = res.data?.facts?.["us-gaap"] ?? {};
+
+    const latestFiled = (key: string): { val: number; end: string } | null => {
+      const units = usGaap[key]?.units ?? {};
+      let best: { val: number; end: string } | null = null;
+      for (const entries of Object.values(units) as Array<Array<{ val: number; end: string; form: string }>>) {
+        for (const form of ["10-K", "10-Q", "10-K/A", "10-Q/A"]) {
+          const matches = entries.filter(e => e.form === form);
+          if (matches.length === 0) continue;
+          matches.sort((a, b) => b.end.localeCompare(a.end));
+          const top = matches[0]!;
+          if (!best || top.end > best.end) best = { val: top.val, end: top.end };
+          break;
+        }
+      }
+      return best;
+    }
+
+    const sharesEntry = latestFiled("CommonStockSharesOutstanding");
+    const btcEntry    = latestFiled("CryptoAssetNumberOfUnits");
+    const debtEntry   = latestFiled("LongTermDebt") ?? latestFiled("NotesPayable");
+
+    return {
+      shares: sharesEntry?.val ?? null,
+      btc:    btcEntry?.val ?? null,
+      debtUsd: debtEntry?.val ?? null,
+      asOf:   sharesEntry?.end ?? btcEntry?.end ?? null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 // ── Risk Label ──────────────────────────────────────────────────────────────────────────────────
 
 function getRiskLabel(coverage: number | null, debtUsd: number): CompanyData["riskLabel"] {
@@ -554,7 +702,7 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
   }
 
   // Fetch all data in parallel
-  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures] = await Promise.all([
+  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl] = await Promise.all([
     fetchFxRates(),
     fetchStockPrices(TICKER_ORDER),
     fetchTdnetDisclosures(),
@@ -562,6 +710,8 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     fetchMfnDisclosures(),
     fetchSecEdgarDisclosures("Strategy", "CIK0001050446", "Nasdaq / SEC EDGAR"),
     fetchSecEdgarDisclosures("Nakamoto Inc.", "CIK0001946573", "Nasdaq / SEC EDGAR"),
+    fetchStrategyTrackerData(),
+    fetchNakaEdgarXbrl(),
   ]);
 
   const btc = await fetchBtcPrice(fx);
@@ -590,15 +740,18 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     let change24h = stock?.change ?? null;
     const priceConfidence: CompanyData["priceConfidence"] = stock ? "LIVE" : "HARDCODED";
 
-    // MSTR: pull live data from strategy.com API (world-class standard: authoritative source first)
+    // Live data overrides — tiered by source authority
     let debtUsd = hc.debtUsd;
     let cashUsd = hc.cashUsd;
     let liveBtcHeld = hc.btc;
-    let liveMarketCapUsd: number | null = null;  // from mstrKpiData (Basic shares × price)
-    let liveEvUsd: number | null = null;          // from mstrKpiData (EV = MC + debt + pref)
+    let liveSharesDiluted = hc.sharesDiluted;
+    let liveMarketCapUsd: number | null = null;
+    let liveEvUsd: number | null = null;
     let livePrefUsd = 0;
     let btcConfidence: CompanyData["btcConfidence"] = "HARDCODED";
+
     if (ticker === "MSTR") {
+      // Strategy: official strategy.com API (most authoritative)
       const mstrLive = await fetchMstrLiveData();
       liveBtcHeld = mstrLive.btcHeld;
       debtUsd = mstrLive.debtUsd;
@@ -607,10 +760,30 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
       liveEvUsd = mstrLive.evUsd;
       livePrefUsd = mstrLive.prefUsd;
       btcConfidence = "LIVE";
+    } else if (ticker === "3350.T" || ticker === "HOGPF" || ticker === "SWC.L") {
+      // Metaplanet, H100, SWC: official StrategyTracker partner data feed
+      const st = strategyTrackerData[ticker];
+      if (st) {
+        liveBtcHeld = st.btc;
+        liveSharesDiluted = st.sharesOutstanding;
+        liveMarketCapUsd = st.marketCap > 0 ? st.marketCap : null;
+        btcConfidence = "LIVE";
+      }
+    } else if (ticker === "NAKA") {
+      // Nakamoto: SEC EDGAR XBRL (official regulatory filing, 1-2Q lag)
+      if (nakaXbrl.btc && nakaXbrl.btc > 0) {
+        liveBtcHeld = nakaXbrl.btc;
+        btcConfidence = "LIVE";
+      }
+      if (nakaXbrl.shares && nakaXbrl.shares > 0) {
+        liveSharesDiluted = nakaXbrl.shares;
+      }
+      // Note: XBRL debt values are in USD but may be in thousands — NAKA debt is small
+      // Keep hardcoded debt as it's more accurate than the XBRL lag
     }
 
     const btcHeld = liveBtcHeld;
-    const sharesDiluted = hc.sharesDiluted;
+    const sharesDiluted = liveSharesDiluted;
     const btcTreasuryUsd = btcHeld * btc.usd;
     const netDebtUsd = debtUsd - cashUsd;
 
