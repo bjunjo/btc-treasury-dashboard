@@ -84,16 +84,16 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // ── Hardcoded fallback data ──────────────────────────────────────────────────
 
 const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: number; cashUsd: number }> = {
-  // Strategy: 528,185 BTC as of Q1 2026; ~254M shares FD (includes convertible notes + preferred)
-  MSTR:   { btc: 528_185,  sharesDiluted: 254_000_000,  debtUsd: 8_190_155_000, cashUsd: 57_000_000 },
-  // Metaplanet: 35,102 BTC (FY2025 audited); 1,142,248,029 shares outstanding (Mar 2026)
-  "3350.T": { btc: 35_102,   sharesDiluted: 1_142_248_029, debtUsd: 275_000_000,   cashUsd: 5_000_000 },
-  // H100 Group: 1,051 BTC; ~338M shares
-  HOGPF:  { btc: 1_051,    sharesDiluted: 338_396_692,  debtUsd: 0,             cashUsd: 0 },
-  // Smarter Web Company: 2,695 BTC; ~396M shares
-  "SWC.L":  { btc: 2_695,    sharesDiluted: 396_040_063,  debtUsd: 0,             cashUsd: 615_218 },
-  // Nakamoto Inc.: 5,398 BTC; ~890M shares (post-merger)
-  NAKA:   { btc: 5_398,    sharesDiluted: 890_148_039,  debtUsd: 210_000_000,   cashUsd: 24_185_083 },
+  // Strategy: 762,099 BTC (Mar 27 2026, bitbo.io); ~254M basic shares; BTC & debt live-fetched from strategy.com API
+  MSTR:   { btc: 762_099,  sharesDiluted: 254_000_000,  debtUsd: 8_190_155_000, cashUsd: 57_000_000 },
+  // Metaplanet: 35,102 BTC (FY2025 audited, Dec 31 2025); 1,166,776,726 shares (Feb 28 2026 TSE filing)
+  "3350.T": { btc: 35_102,   sharesDiluted: 1_166_776_726, debtUsd: 275_000_000,   cashUsd: 5_000_000 },
+  // H100 Group: 1,004 BTC (FY2025 report, Feb 2026); 335,250,237 shares; ~$8.5M debt (SEK-denominated)
+  HOGPF:  { btc: 1_004,    sharesDiluted: 335_250_237,  debtUsd: 8_478_799,     cashUsd: 0 },
+  // Smarter Web Company: 2,440 BTC (Mar 2026, bitbo.io); ~203M shares (post Jan 2026 issuances); ~$13.8M CLN debt
+  "SWC.L":  { btc: 2_440,    sharesDiluted: 203_091_857,  debtUsd: 13_838_448,    cashUsd: 615_218 },
+  // Nakamoto Inc.: 5,764 BTC (Mar 2026, bitbo.io); ~683M shares post BTC Inc + UTXO acquisition
+  NAKA:   { btc: 5_764,    sharesDiluted: 683_450_000,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
 };
 
 const COMPANY_META: Record<string, { name: string; exchange: string; country: string; flag: string; localCurrency: string }> = {

@@ -258,8 +258,8 @@ function CompanyRow({
           </div>
         </td>
 
-        {/* Mkt Cap (FD) — hidden on mobile */}
-        <td className={`py-3 pr-3 text-right align-middle hidden sm:table-cell ${sortBy === "mktCap" ? "text-btc" : ""}`}>
+        {/* Mkt Cap (FD) — hidden on mobile, shown when sorted */}
+        <td className={`py-3 pr-3 text-right align-middle ${sortBy === "mktCap" ? "table-cell text-btc" : "hidden sm:table-cell"}`}>
           <span className="font-mono text-sm tabular-nums font-semibold">
             {fmtMktCap(company.fdMarketCapUsd)}
           </span>
@@ -276,15 +276,15 @@ function CompanyRow({
           </span>
         </td>
 
-        {/* BTC/Share — hidden on mobile and sm */}
-        <td className={`py-3 pr-3 text-right align-middle hidden md:table-cell ${sortBy === "btcPerShare" ? "text-btc" : ""}`}>
+        {/* BTC/Share — hidden on mobile/sm, shown when sorted */}
+        <td className={`py-3 pr-3 text-right align-middle ${sortBy === "btcPerShare" ? "table-cell text-btc" : "hidden md:table-cell"}`}>
           <span className="font-mono text-xs text-muted-foreground tabular-nums">
             {fmtSats(company.btcPerShareSats)}
           </span>
         </td>
 
-        {/* mNAV — hidden on mobile */}
-        <td className={`py-3 pr-3 text-right align-middle hidden sm:table-cell ${sortBy === "mnav" ? "ring-0" : ""}`}>
+        {/* mNAV — hidden on mobile, shown when sorted */}
+        <td className={`py-3 pr-3 text-right align-middle ${sortBy === "mnav" ? "table-cell" : "hidden sm:table-cell"}`}>
           <MNavBadge value={company.mNavEv} />
         </td>
 
@@ -736,7 +736,7 @@ export default function Home() {
                 <th className="py-2.5 pl-4 pr-2 text-left w-10">#</th>
                 <th className="py-2.5 pr-3 text-left" style={{ minWidth: "130px" }}>Company</th>
                 <th className="py-2.5 pr-3 text-right hidden sm:table-cell">Price (USD)</th>
-                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">
+                <th className={`py-2.5 pr-3 text-right ${sortBy === "mktCap" ? "table-cell" : "hidden sm:table-cell"}`}>
                   <span className="inline-flex items-center justify-end">
                     Mkt Cap
                     <InfoTip>
@@ -746,8 +746,8 @@ export default function Home() {
                   </span>
                 </th>
                 <th className="py-2.5 pr-3 text-right">BTC Held</th>
-                <th className="py-2.5 pr-3 text-right hidden md:table-cell">BTC/Share</th>
-                <th className="py-2.5 pr-3 text-right hidden sm:table-cell">
+                <th className={`py-2.5 pr-3 text-right ${sortBy === "btcPerShare" ? "table-cell" : "hidden md:table-cell"}`}>BTC/Share</th>
+                <th className={`py-2.5 pr-3 text-right ${sortBy === "mnav" ? "table-cell" : "hidden sm:table-cell"}`}>
                   <span className="inline-flex items-center justify-end">
                     mNAV
                     <InfoTip>
