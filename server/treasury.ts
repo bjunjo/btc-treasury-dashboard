@@ -88,10 +88,16 @@ const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: n
   MSTR:   { btc: 762_099,  sharesDiluted: 254_000_000,  debtUsd: 8_190_155_000, cashUsd: 57_000_000 },
   // Metaplanet: 35,102 BTC (FY2025 audited, Dec 31 2025); 1,166,776,726 shares (Feb 28 2026 TSE filing)
   "3350.T": { btc: 35_102,   sharesDiluted: 1_166_776_726, debtUsd: 275_000_000,   cashUsd: 5_000_000 },
-  // H100 Group: 1,004 BTC (FY2025 report, Feb 2026); 335,250,237 shares; ~$8.5M debt (SEK-denominated)
-  HOGPF:  { btc: 1_004,    sharesDiluted: 335_250_237,  debtUsd: 8_478_799,     cashUsd: 0 },
-  // Smarter Web Company: 2,440 BTC (Mar 2026, bitbo.io); ~203M shares (post Jan 2026 issuances); ~$13.8M CLN debt
-  "SWC.L":  { btc: 2_440,    sharesDiluted: 203_091_857,  debtUsd: 13_838_448,    cashUsd: 615_218 },
+  // H100 Group: 1,051 BTC (post-balance-sheet, Q4 2025 report filed 2026-02-24);
+  //   Debt: SEK 75,480,378 convertible bond liability component (IFRS split: ~70M SEK debt / ~150M SEK equity)
+  //   Source: Condensed consolidated statement of financial position, Q4 2025 Full-Year Report
+  //   SEK/USD ~0.0944 (Mar 2026); update debt when next quarterly report is filed
+  HOGPF:  { btc: 1_051,    sharesDiluted: 335_250_237,  debtUsd: 7_125_348,     cashUsd: 0 },
+  // Smarter Web Company: 2,689 BTC (Oct 31 2025 annual report); 398,869,927 shares;
+  //   Debt: £10,957,578 Smarter Convert CLN (1-yr note, matures ~Aug 2026, carried at FVTPL net of Day 1 loss)
+  //   Source: Note 24, Annual Report 2025 (year-end Oct 31 2025, filed 2026-02-19)
+  //   GBP/USD ~1.295 (Mar 2026); update when next annual report is filed (Oct 2026)
+  "SWC.L":  { btc: 2_689,    sharesDiluted: 398_869_927,  debtUsd: 14_190_564,    cashUsd: 615_218 },
   // Nakamoto Inc.: 5,764 BTC (Mar 2026, bitbo.io); ~683M shares post BTC Inc + UTXO acquisition
   NAKA:   { btc: 5_764,    sharesDiluted: 683_450_000,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
 };
