@@ -2,7 +2,7 @@
 
 **A personal, open-source dashboard for tracking companies that hold Bitcoin on their balance sheet.**
 
-Live at → [btc-treasury-dashboard](https://3000-io697g5jiixyvpcvb7keb-f1967d77.sg1.manus.computer)
+Live at → [btc-treasury-dashboard](https://treasury.bjunjo.com)
 
 ---
 
