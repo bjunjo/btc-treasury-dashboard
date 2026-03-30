@@ -98,8 +98,9 @@ const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: n
   //   Source: Note 24, Annual Report 2025 (year-end Oct 31 2025, filed 2026-02-19)
   //   GBP/USD ~1.295 (Mar 2026); update when next annual report is filed (Oct 2026)
   "SWC.L":  { btc: 2_689,    sharesDiluted: 398_869_927,  debtUsd: 14_190_564,    cashUsd: 615_218 },
-  // Nakamoto Inc.: 5,764 BTC (Mar 2026, bitbo.io); ~683M shares post BTC Inc + UTXO acquisition
-  NAKA:   { btc: 5_764,    sharesDiluted: 683_450_000,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
+  // Nakamoto Inc.: 5,342 BTC (Mar 27 2026, SEC S-3/A filing); ~683M shares post BTC Inc + UTXO acquisition
+  // Source: POSAM S-3 filed 2026-03-27 states "holds ~5342 BTC valued at $467.5M"
+  NAKA:   { btc: 5_342,    sharesDiluted: 683_450_000,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
 };
 
 const COMPANY_META: Record<string, { name: string; exchange: string; country: string; flag: string; localCurrency: string }> = {
@@ -630,6 +631,49 @@ async function fetchStrategyTrackerData(): Promise<StrategyTrackerMap> {
   }
 }
 
+// ── SEC EDGAR — Nakamoto BTC holdings from S-3/8-K text ─────────────────────
+// NAKA files BTC holdings in S-3 registration statements and 8-K press releases.
+// These are more current than XBRL 10-Q (which lags 1-2 quarters).
+// We scan the 10 most recent filings (any form) for a BTC holdings sentence.
+async function fetchNakaBtcFromSecFilings(): Promise<{ btc: number | null; asOf: string | null }> {
+  try {
+    const subRes = await axios.get("https://data.sec.gov/submissions/CIK0001946573.json", {
+      timeout: 10000,
+      headers: { "User-Agent": "btc-treasury-dashboard contact@bjunjo.com", Accept: "application/json" },
+    });
+    const recent = subRes.data?.filings?.recent ?? {};
+    const forms: string[] = recent.form ?? [];
+    const dates: string[] = recent.filingDate ?? [];
+    const accessions: string[] = recent.accessionNumber ?? [];
+    const docs: string[] = recent.primaryDocument ?? [];
+
+    // Scan last 15 filings for a BTC holdings number
+    for (let i = 0; i < Math.min(15, forms.length); i++) {
+      const acc = accessions[i]!.replace(/-/g, "");
+      const doc = docs[i] ?? "";
+      if (!doc.endsWith(".htm") && !doc.endsWith(".html")) continue;
+      const url = `https://www.sec.gov/Archives/edgar/data/1946573/${acc}/${doc}`;
+      try {
+        const res = await axios.get(url, {
+          timeout: 8000,
+          headers: { "User-Agent": "btc-treasury-dashboard contact@bjunjo.com" },
+        });
+        const text = (res.data as string).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+        // Match patterns like "holds ~5,342 BTC", "5,398 bitcoin", "aggregate of 5,342 bitcoin"
+        const m = text.match(/(?:holds?|holding|aggregate(?:\s+of)?|total(?:\s+of)?|approximately)\s*~?\s*([\d,]+)\s*(?:bitcoin|BTC)/i)
+                ?? text.match(/([\d,]+)\s*(?:bitcoin|BTC)\s*(?:valued|held|in its treasury)/i);
+        if (m) {
+          const btc = parseFloat(m[1]!.replace(/,/g, ""));
+          if (btc > 100 && btc < 100_000) {
+            return { btc, asOf: dates[i] ?? null };
+          }
+        }
+      } catch { /* skip */ }
+    }
+  } catch { /* silent fail */ }
+  return { btc: null, asOf: null };
+}
+
 // ── SEC EDGAR XBRL live data (Nakamoto Inc.) ─────────────────────────────────
 //
 // SEC EDGAR XBRL is the authoritative regulatory source for US public companies.
@@ -714,7 +758,7 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
   }
 
   // Fetch all data in parallel
-  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl] = await Promise.all([
+  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl, nakaSecFilings] = await Promise.all([
     fetchFxRates(),
     fetchStockPrices(TICKER_ORDER),
     fetchTdnetDisclosures(),
@@ -724,6 +768,7 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
     fetchSecEdgarDisclosures("Nakamoto Inc.", "CIK0001946573", "Nasdaq / SEC EDGAR"),
     fetchStrategyTrackerData(),
     fetchNakaEdgarXbrl(),
+    fetchNakaBtcFromSecFilings(),
   ]);
 
   const btc = await fetchBtcPrice(fx);
@@ -782,16 +827,18 @@ export async function fetchTreasuryData(): Promise<TreasuryData> {
         btcConfidence = "LIVE";
       }
     } else if (ticker === "NAKA") {
-      // Nakamoto: SEC EDGAR XBRL (official regulatory filing, 1-2Q lag)
-      if (nakaXbrl.btc && nakaXbrl.btc > 0) {
+      // Nakamoto: prefer SEC filing text (S-3/8-K) > XBRL 10-Q > hardcoded
+      // SEC filing text is most current (updated on each S-3 or 8-K)
+      if (nakaSecFilings.btc && nakaSecFilings.btc > 0) {
+        liveBtcHeld = nakaSecFilings.btc;
+        btcConfidence = "LIVE";
+      } else if (nakaXbrl.btc && nakaXbrl.btc > 0) {
         liveBtcHeld = nakaXbrl.btc;
         btcConfidence = "LIVE";
       }
       if (nakaXbrl.shares && nakaXbrl.shares > 0) {
         liveSharesDiluted = nakaXbrl.shares;
       }
-      // Note: XBRL debt values are in USD but may be in thousands — NAKA debt is small
-      // Keep hardcoded debt as it's more accurate than the XBRL lag
     }
 
     const btcHeld = liveBtcHeld;
