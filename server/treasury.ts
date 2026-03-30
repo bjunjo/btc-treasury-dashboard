@@ -79,7 +79,7 @@ export interface TreasuryData {
 // ── Cache ────────────────────────────────────────────────────────────────────
 
 let _cache: { data: TreasuryData; ts: number } | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — BTC holdings change weekly at most; prices tolerate 30min lag
 
 // ── Hardcoded fallback data ──────────────────────────────────────────────────
 

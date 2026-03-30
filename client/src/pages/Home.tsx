@@ -624,7 +624,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 export default function Home() {
   const { data, isLoading, error, refetch, isFetching } = trpc.treasury.getData.useQuery(undefined, {
-    refetchInterval: 60_000,
+    refetchInterval: 5 * 60_000, // 5 minutes — matches server cache TTL
     staleTime: 55_000,
   });
 
@@ -816,7 +816,7 @@ export default function Home() {
               Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR
             </div>
             <div className="text-xs text-muted-foreground font-mono">
-              Auto-refreshes every 60s
+              Auto-refreshes every 5 min
             </div>
           </div>
         </div>
