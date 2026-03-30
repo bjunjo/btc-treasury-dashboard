@@ -10,7 +10,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 
-# Install all dependencies (including devDeps needed for build)
+# Install ALL dependencies (dev + prod needed for build and runtime)
 RUN pnpm install --frozen-lockfile
 
 # Copy source
@@ -24,19 +24,11 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Install pnpm for production install
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-COPY patches/ ./patches/
-
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
-
-# Copy built output from builder
-# dist/index.js = server bundle, dist/public/ = Vite client build
+# Copy everything from builder — node_modules included
+# This avoids ERR_MODULE_NOT_FOUND since the server bundle uses --packages=external
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./package.json
 
 ENV NODE_ENV=production
 ENV PORT=3000
