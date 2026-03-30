@@ -601,11 +601,17 @@ async function fetchStrategyTrackerData(): Promise<StrategyTrackerMap> {
       const shares = typeof pm.latestTotalShares === "number" && pm.latestTotalShares > 0
         ? pm.latestTotalShares
         : (typeof pm.sharesOutstanding === "number" && pm.sharesOutstanding > 0 ? pm.sharesOutstanding : null);
-      const mc = typeof pm.currentMarketCap === "number" && pm.currentMarketCap > 0
-        ? pm.currentMarketCap
-        : (typeof entry.marketCap === "number" && entry.marketCap > 0 ? entry.marketCap : null);
-      const sats = typeof entry.satsPerShare === "number" ? entry.satsPerShare : null;
-      const nav = typeof entry.navPremium === "number" ? entry.navPremium : null;
+      // marketCapBasic = latestTotalShares (issued shares) × price — matches analytics.metaplanet.jp
+      // currentMarketCap = sharesOutstanding (float only) × price — too low for Metaplanet
+      const mc = typeof pm.marketCapBasic === "number" && pm.marketCapBasic > 0
+        ? pm.marketCapBasic
+        : (typeof pm.currentMarketCap === "number" && pm.currentMarketCap > 0
+          ? pm.currentMarketCap
+          : (typeof entry.marketCap === "number" && entry.marketCap > 0 ? entry.marketCap : null));
+      const sats = typeof pm.shareCostSats === "number" ? pm.shareCostSats
+        : (typeof entry.satsPerShare === "number" ? entry.satsPerShare : null);
+      const nav = typeof pm.navPremiumBasic === "number" ? pm.navPremiumBasic
+        : (typeof entry.navPremium === "number" ? entry.navPremium : null);
       if (btc && shares) {
         result[ourTicker] = {
           btc,
