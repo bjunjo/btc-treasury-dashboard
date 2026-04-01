@@ -2,8 +2,10 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import cron from "node-cron";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
+import { fetchTreasuryData } from "../treasury";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -55,6 +57,20 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+  });
+
+  // ── Daily scheduled cache refresh ──────────────────────────────────────────
+  // TSE closes at 15:30 JST = 06:30 UTC.
+  // Run at 06:30 UTC every weekday (Mon–Fri) to capture same-day disclosures.
+  // Also run at 06:30 UTC on weekends to catch any late filings.
+  cron.schedule("0 30 6 * * *", async () => {
+    console.log("[cron] Daily refresh triggered at UTC 06:30 (JST 15:30)");
+    try {
+      await fetchTreasuryData(true); // force = bypass cache
+      console.log("[cron] Daily refresh complete");
+    } catch (e) {
+      console.error("[cron] Daily refresh failed:", (e as Error).message);
+    }
   });
 }
 

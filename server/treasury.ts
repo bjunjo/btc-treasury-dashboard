@@ -747,9 +747,9 @@ function getRiskLabel(coverage: number | null, debtUsd: number): CompanyData["ri
 
 // ── Main Fetch ────────────────────────────────────────────────────────────────
 
-export async function fetchTreasuryData(): Promise<TreasuryData> {
-  // Return cached data if fresh
-  if (_cache && Date.now() - _cache.ts < CACHE_TTL_MS) {
+export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
+  // Return cached data if fresh (unless force-refresh requested)
+  if (!force && _cache && Date.now() - _cache.ts < CACHE_TTL_MS) {
     return _cache.data;
   }
 
