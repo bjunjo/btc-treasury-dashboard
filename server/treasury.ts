@@ -341,11 +341,10 @@ async function fetchTdnetDisclosures(): Promise<Disclosure[]> {
     });
     const html: string = res.data;
 
-    // The RSC payload double-escapes JSON. Unescape one level to get parseable JSON.
-    const unescaped = html.replace(/\\\\"/g, '"').replace(/\\\\\\\\/g, "\\\\");
-
-    // Extract all disclosure objects: {id, date, title, filePath, isEnglish, type}
-    const itemRe = /\{"id":"[^"]+","date":"(\d{4}-\d{2}-\d{2})","title":"([^"]+)","filePath":"([^"]+)","isEnglish":(true|false)/g;
+    // metaplanet.jp RSC payload escapes JSON as \\\" (triple backslash + quote).
+    // Match directly against the raw escaped form.
+    const itemRe = /\{\\\"id\\\":\\\"[^\\\"]+\\\",\\\"date\\\":\\\"(\d{4}-\d{2}-\d{2})\\\",\\\"title\\\":\\\"((?:[^\\\\]|\\\\.)*?)\\\",\\\"filePath\\\":\\\"((?:[^\\\\]|\\\\.)*?)\\\",\\\"isEnglish\\\":(true|false)/g;
+    const unescaped = html; // match raw — no unescaping needed
     const seen = new Set<string>();
     const disclosures: Disclosure[] = [];
     let match;
