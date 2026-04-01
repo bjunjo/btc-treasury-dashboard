@@ -98,9 +98,10 @@ const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: n
   //   Source: Note 24, Annual Report 2025 (year-end Oct 31 2025, filed 2026-02-19)
   //   GBP/USD ~1.295 (Mar 2026); update when next annual report is filed (Oct 2026)
   "SWC.L":  { btc: 2_689,    sharesDiluted: 398_869_927,  debtUsd: 14_190_564,    cashUsd: 615_218 },
-  // Nakamoto Inc.: 5,342 BTC (Mar 27 2026, SEC S-3/A filing); ~683M shares post BTC Inc + UTXO acquisition
-  // Source: POSAM S-3 filed 2026-03-27 states "holds ~5342 BTC valued at $467.5M"
-  NAKA:   { btc: 5_342,    sharesDiluted: 683_450_000,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
+  // Nakamoto Inc.: 5,342 BTC (Dec 31 2025, Q4 earnings press release filed 2026-03-30)
+  // Fully diluted shares: 892,723,518 as of Mar 27 2026 (common 690,018,254 + options 78,714,493 + pre-funded warrants 61,704,975 + holdback shares 27,483,604 + RSUs 17,636,822 + letters of transmittal 16,678,652 + cash warrants 486,718)
+  // Source: Nakamoto Inc. Exhibit 99.1, SEC EDGAR, filed 2026-03-30
+  NAKA:   { btc: 5_342,    sharesDiluted: 892_723_518,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
 };
 
 const COMPANY_META: Record<string, { name: string; exchange: string; country: string; flag: string; localCurrency: string }> = {
