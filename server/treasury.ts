@@ -329,68 +329,50 @@ async function translateJapanese(title: string): Promise<string> {
   }
 }
 
-// ── TDnet Disclosures (Metaplanet) ────────────────────────────────────────────
+// ── Metaplanet Disclosures (metaplanet.jp) ────────────────────────────────────
+// Source: metaplanet.jp/en/disclosures — English titles + direct PDF links
+// embedded in the page's RSC payload as escaped JSON.
 
 async function fetchTdnetDisclosures(): Promise<Disclosure[]> {
-  const disclosures: Disclosure[] = [];
   try {
-    const today = new Date();
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10).replace(/-/g, "");
-      // TDnet paginates at 100 entries per page; Metaplanet (3350) can appear on any page.
-      // Iterate all pages until an empty page is found.
-      for (let page = 1; page <= 15; page++) {
-        const pageStr = String(page).padStart(2, "0");
-        const url = `https://www.release.tdnet.info/inbs/I_list_0${pageStr}_${dateStr}.html`;
-        let res;
-        try {
-          res = await axios.get(url, {
-            timeout: 8000,
-            headers: { "User-Agent": "Mozilla/5.0", "Accept-Charset": "utf-8" },
-            responseType: "arraybuffer",
-          });
-        } catch {
-          break; // 404 or network error — no more pages
-        }
-        const html = new TextDecoder("utf-8").decode(res.data);
-        const root = parseHtml(html);
-        const rows = root.querySelectorAll("tr");
-        let rowsWithData = 0;
-        for (const row of rows) {
-          const cells = row.querySelectorAll("td");
-          if (cells.length < 5) continue;
-          rowsWithData++;
-          const codeCell = cells.find(c => c.text.trim() === "33500" || c.text.trim() === "3350");
-          if (!codeCell) continue;
-          const timeCell = cells[0]?.text.trim() ?? "";
-          const titleCell = cells.find(c => c.querySelector("a"));
-          const title = titleCell?.text.trim() ?? "";
-          const pdfHref = titleCell?.querySelector("a")?.getAttribute("href") ?? null;
-          const pdfUrl = pdfHref ? `https://www.release.tdnet.info/inbs/${pdfHref.replace(/^\.\//,  "")}` : null;
-          const isBtc = /bitcoin|btc|ビットコイン|BTC/i.test(title);
-          const titleEn = await translateJapanese(title);
-          disclosures.push({
-            company: "Metaplanet",
-            exchange: "TSE / TDnet",
-            date: `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)} ${timeCell}`,
-            title: titleEn,
-            isBtc,
-            isInsideInfo: false,
-            pdfUrl,
-            source: "Tier1-TDnet",
-            url: `https://www.release.tdnet.info/inbs/I_list_0${pageStr}_${dateStr}.html`,
-          });
-        }
-        if (rowsWithData === 0) break; // empty page — no more data for this date
-      }
-      if (disclosures.length > 0) break;
+    const res = await axios.get("https://metaplanet.jp/en/disclosures", {
+      timeout: 12000,
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+    });
+    const html: string = res.data;
+
+    // The RSC payload double-escapes JSON. Unescape one level to get parseable JSON.
+    const unescaped = html.replace(/\\\\"/g, '"').replace(/\\\\\\\\/g, "\\\\");
+
+    // Extract all disclosure objects: {id, date, title, filePath, isEnglish, type}
+    const itemRe = /\{"id":"[^"]+","date":"(\d{4}-\d{2}-\d{2})","title":"([^"]+)","filePath":"([^"]+)","isEnglish":(true|false)/g;
+    const seen = new Set<string>();
+    const disclosures: Disclosure[] = [];
+    let match;
+    while ((match = itemRe.exec(unescaped)) !== null) {
+      const [, date, title, filePath, isEnglish] = match;
+      if (isEnglish !== "true") continue;  // English translations only
+      const key = `${date}::${title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const isBtc = /bitcoin|btc/i.test(title);
+      disclosures.push({
+        company: "Metaplanet",
+        exchange: "TSE / TDnet",
+        date,
+        title,
+        isBtc,
+        isInsideInfo: false,
+        pdfUrl: filePath,
+        source: "Tier1-TDnet",
+        url: filePath,
+      });
     }
+    // Return most recent 10
+    return disclosures.slice(0, 10);
   } catch {
-    // silent fail
+    return [];
   }
-  return disclosures;
 }
 
 // ── LSE alldata API (SWC) ─────────────────────────────────────────────────────
