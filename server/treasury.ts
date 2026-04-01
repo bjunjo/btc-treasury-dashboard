@@ -370,7 +370,8 @@ async function fetchTdnetDisclosures(): Promise<Disclosure[]> {
     }
     // Return most recent 10
     return disclosures.slice(0, 10);
-  } catch {
+  } catch (e) {
+    console.error("[fetchTdnetDisclosures] error:", (e as Error).message);
     return [];
   }
 }
