@@ -121,11 +121,33 @@ function RiskBadge({ label }: { label: CompanyData["riskLabel"] }) {
 
 // -
 
+function HardcodedWarn() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex items-center ml-1 align-middle text-yellow-500/80 hover:text-yellow-500 cursor-help"
+          onClick={e => e.stopPropagation()}
+        >
+          <AlertTriangle className="w-3 h-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[240px] text-left leading-relaxed">
+        Using last known value — live data unavailable.
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// -
+
 function MNavBadge({ value }: { value: number | null }) {
   if (value === null) return <span className="text-muted-foreground font-mono text-sm">—</span>;
-  const cls = value < 1.5
+  const cls = value < 1.0
+    ? "text-muted-foreground"
+    : value < 1.5
     ? "text-risk-low"
-    : value < 3
+    : value <= 3
     ? "text-risk-mod"
     : "text-risk-crit";
   return <span className={`font-mono text-sm tabular-nums font-semibold ${cls}`}>{value.toFixed(2)}x</span>;
@@ -250,8 +272,9 @@ function CompanyRow({
 
         {/* Price (USD) — hidden on mobile */}
         <td className="py-3 pr-3 text-right align-middle hidden sm:table-cell">
-          <div className="font-mono text-sm text-foreground tabular-nums">
+          <div className="font-mono text-sm text-foreground tabular-nums inline-flex items-center justify-end">
             {company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"}
+            {company.priceConfidence === "HARDCODED" && <HardcodedWarn />}
           </div>
           <div className={`font-mono text-xs tabular-nums mt-0.5 ${chg.up ? "text-up" : "text-down"}`}>
             {chg.text}
@@ -271,6 +294,7 @@ function CompanyRow({
           <span className="font-mono text-sm font-semibold text-btc tabular-nums">
             {fmtBtc(company.btcHeld)}
           </span>
+          {company.btcConfidence === "HARDCODED" && <HardcodedWarn />}
           <span className="font-mono text-muted-foreground/60 tabular-nums ml-1" style={{ fontSize: "10px" }}>
             {((company.btcHeld / 21_000_000) * 100).toFixed(2)}%
           </span>
@@ -504,6 +528,7 @@ function ExchangeBadge({ source }: { source: string }) {
 function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[]; companies: CompanyData[] }) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("All");
+  const [btcOnly, setBtcOnly] = useState(false);
 
   if (disclosures.length === 0) return null;
 
@@ -513,9 +538,10 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
     .map(c => c.name)
   ];
 
-  const filtered = activeTab === "All"
+  let filtered = activeTab === "All"
     ? disclosures
     : disclosures.filter(d => d.company === activeTab);
+  if (btcOnly) filtered = filtered.filter(d => d.isBtc);
 
   return (
     <div className="mt-6 border border-border rounded-lg overflow-hidden">
@@ -539,7 +565,7 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
       {open && (
         <>
           {/* Company tabs */}
-          <div className="bg-card/50 px-4 pt-3 pb-0 flex gap-1.5 flex-wrap border-b border-border">
+          <div className="bg-card/50 px-4 pt-3 pb-0 flex gap-1.5 flex-wrap items-center border-b border-border">
             {tabs.map(tab => (
               <button
                 key={tab}
@@ -553,6 +579,16 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
                 {tab}
               </button>
             ))}
+            <label className="ml-auto mb-1.5 inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
+              <input
+                type="checkbox"
+                checked={btcOnly}
+                onChange={e => setBtcOnly(e.target.checked)}
+                className="accent-btc w-3 h-3"
+              />
+              <span className="text-btc">₿</span>
+              BTC-only
+            </label>
           </div>
 
           {/* Disclosure rows */}
@@ -613,13 +649,14 @@ function DisclosureFeed({ disclosures, companies }: { disclosures: Disclosure[];
 
 // -
 
-type SortKey = "btc" | "mnav" | "btcPerShare" | "mktCap";
+type SortKey = "btc" | "mnav" | "btcPerShare" | "mktCap" | "chg24h";
 
 const SORT_LABELS: Record<SortKey, string> = {
   btc: "BTC Held",
   mnav: "mNAV",
   btcPerShare: "BTC/Share",
   mktCap: "Mkt Cap",
+  chg24h: "24h Chg",
 };
 
 export default function Home() {
@@ -650,12 +687,27 @@ export default function Home() {
         if (sortBy === "mnav")       return (a.mNavEv ?? 999) - (b.mNavEv ?? 999);
         if (sortBy === "btcPerShare") return (b.btcPerShareSats ?? 0) - (a.btcPerShareSats ?? 0);
         if (sortBy === "mktCap")     return (b.fdMarketCapUsd ?? 0) - (a.fdMarketCapUsd ?? 0);
+        if (sortBy === "chg24h")     return (b.change24h ?? -Infinity) - (a.change24h ?? -Infinity);
         return 0;
       })
     : [];
 
   const totalBtc = data?.companies.reduce((s, c) => s + c.btcHeld, 0) ?? 0;
   const totalTreasuryUsd = data?.companies.reduce((s, c) => s + (c.btcTreasuryUsd ?? 0), 0) ?? 0;
+
+  // BTC-weighted average mNAV across companies with a known mNAV
+  const avgMNavWeighted = (() => {
+    if (!data?.companies) return null;
+    let num = 0;
+    let den = 0;
+    for (const c of data.companies) {
+      if (c.mNavEv !== null && c.btcHeld > 0) {
+        num += c.mNavEv * c.btcHeld;
+        den += c.btcHeld;
+      }
+    }
+    return den > 0 ? num / den : null;
+  })();
 
   return (
     <>
@@ -699,10 +751,14 @@ export default function Home() {
       <main className="container py-6">
         {/* Summary stats */}
         {data && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
             <SummaryStat label="Companies Tracked" value={`${data.companies.length}`} />
             <SummaryStat label="Total BTC Held" value={fmtBtc(totalBtc)} accent />
             <SummaryStat label="Total Treasury Value" value={fmtUsd(totalTreasuryUsd, true)} />
+            <SummaryStat
+              label="Avg mNAV (BTC-wt)"
+              value={avgMNavWeighted !== null ? `${avgMNavWeighted.toFixed(2)}x` : "—"}
+            />
             <SummaryStat label="BTC Price" value={fmtUsd(data.btc.usd)} />
           </div>
         )}
@@ -796,6 +852,9 @@ export default function Home() {
           </table>
         </div>
 
+        {/* On the Radar — companies we're watching but not yet fully tracking */}
+        <OnTheRadar />
+
         {/* Disclosure feed */}
         {data && <DisclosureFeed disclosures={data.disclosures} companies={data.companies} />}
 
@@ -825,6 +884,40 @@ export default function Home() {
     </>
   );
 }
+
+// -
+
+const RADAR: Array<{ name: string; flag: string; ticker: string; btc: number }> = [
+  { name: "Capital B",  flag: "🇫🇷", ticker: "ALCPB.PA / CPTLF", btc: 2888 },
+  { name: "OranjeBTC", flag: "🇧🇷", ticker: "OBTC3",              btc: 3708 },
+];
+
+function OnTheRadar() {
+  return (
+    <div className="mt-6">
+      <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+        On the Radar
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {RADAR.map(r => (
+          <div key={r.ticker} className="bg-card border border-border border-dashed rounded-lg px-3 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg leading-none">{r.flag}</span>
+              <div className="font-semibold text-sm text-foreground">{r.name}</div>
+              <span className="ml-auto font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Radar</span>
+            </div>
+            <div className="font-mono text-xs text-muted-foreground mb-1">{r.ticker}</div>
+            <div className="font-mono text-sm font-semibold text-btc tabular-nums">
+              {fmtBtc(r.btc)} <span className="text-muted-foreground/60 text-xs">approx.</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// -
 
 function SummaryStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
