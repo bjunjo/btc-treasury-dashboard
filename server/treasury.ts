@@ -11,8 +11,16 @@
  */
 
 import axios from "axios";
+import http from "node:http";
+import https from "node:https";
 import { parse as parseHtml } from "node-html-parser";
 import { invokeLLM } from "./_core/llm";
+
+// Keep-alive agents shared across all outbound HTTP calls. Saves one TCP+TLS
+// handshake per request against the same host — meaningful when we make 20+
+// calls per refresh to a handful of upstreams (SEC, CoinGecko, Yahoo, etc).
+axios.defaults.httpAgent = new http.Agent({ keepAlive: true, maxSockets: 32 });
+axios.defaults.httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 32 });
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -643,28 +651,41 @@ async function fetchNakaBtcFromSecFilings(): Promise<{ btc: number | null; asOf:
     const accessions: string[] = recent.accessionNumber ?? [];
     const docs: string[] = recent.primaryDocument ?? [];
 
-    // Scan last 15 filings for a BTC holdings number
+    // Build the list of candidate filing URLs (ordered newest → oldest)
+    type Candidate = { url: string; date: string | null };
+    const candidates: Candidate[] = [];
     for (let i = 0; i < Math.min(15, forms.length); i++) {
       const acc = accessions[i]!.replace(/-/g, "");
       const doc = docs[i] ?? "";
       if (!doc.endsWith(".htm") && !doc.endsWith(".html")) continue;
-      const url = `https://www.sec.gov/Archives/edgar/data/1946573/${acc}/${doc}`;
-      try {
-        const res = await axios.get(url, {
-          timeout: 8000,
-          headers: { "User-Agent": "btc-treasury-dashboard contact@bjunjo.com" },
-        });
-        const text = (res.data as string).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-        // Match patterns like "holds ~5,342 BTC", "5,398 bitcoin", "aggregate of 5,342 bitcoin"
-        const m = text.match(/(?:holds?|holding|aggregate(?:\s+of)?|total(?:\s+of)?|approximately)\s*~?\s*([\d,]+)\s*(?:bitcoin|BTC)/i)
-                ?? text.match(/([\d,]+)\s*(?:bitcoin|BTC)\s*(?:valued|held|in its treasury)/i);
-        if (m) {
-          const btc = parseFloat(m[1]!.replace(/,/g, ""));
-          if (btc > 100 && btc < 100_000) {
-            return { btc, asOf: dates[i] ?? null };
-          }
+      candidates.push({
+        url: `https://www.sec.gov/Archives/edgar/data/1946573/${acc}/${doc}`,
+        date: dates[i] ?? null,
+      });
+    }
+
+    // Fetch all candidates in parallel, then walk results in original (newest-first)
+    // order so the most recent matching filing wins — same semantics as the old
+    // sequential loop but without the serialized-await waterfall.
+    const results = await Promise.allSettled(candidates.map(c =>
+      axios.get(c.url, {
+        timeout: 8000,
+        headers: { "User-Agent": "btc-treasury-dashboard contact@bjunjo.com" },
+      })
+    ));
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i]!;
+      if (r.status !== "fulfilled") continue;
+      const text = (r.value.data as string).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      // Match patterns like "holds ~5,342 BTC", "5,398 bitcoin", "aggregate of 5,342 bitcoin"
+      const m = text.match(/(?:holds?|holding|aggregate(?:\s+of)?|total(?:\s+of)?|approximately)\s*~?\s*([\d,]+)\s*(?:bitcoin|BTC)/i)
+              ?? text.match(/([\d,]+)\s*(?:bitcoin|BTC)\s*(?:valued|held|in its treasury)/i);
+      if (m) {
+        const btc = parseFloat(m[1]!.replace(/,/g, ""));
+        if (btc > 100 && btc < 100_000) {
+          return { btc, asOf: candidates[i]!.date };
         }
-      } catch { /* skip */ }
+      }
     }
   } catch { /* silent fail */ }
   return { btc: null, asOf: null };
@@ -754,7 +775,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
   }
 
   // Fetch all data in parallel
-  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl, nakaSecFilings] = await Promise.all([
+  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl, nakaSecFilings, mstrLive] = await Promise.all([
     fetchFxRates(),
     fetchStockPrices(TICKER_ORDER),
     fetchTdnetDisclosures(),
@@ -765,6 +786,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     fetchStrategyTrackerData(),
     fetchNakaEdgarXbrl(),
     fetchNakaBtcFromSecFilings(),
+    fetchMstrLiveData(),
   ]);
 
   const btc = await fetchBtcPrice(fx);
@@ -805,7 +827,8 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
 
     if (ticker === "MSTR") {
       // Strategy: official strategy.com API (most authoritative)
-      const mstrLive = await fetchMstrLiveData();
+      // `mstrLive` was fetched in the top-level Promise.all above — reuse it
+      // instead of making a second call here.
       liveBtcHeld = mstrLive.btcHeld;
       debtUsd = mstrLive.debtUsd;
       cashUsd = mstrLive.cashUsd;
