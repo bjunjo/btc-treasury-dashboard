@@ -167,6 +167,27 @@ function HardcodedWarn() {
   );
 }
 
+function StaleWarn({ asOf }: { asOf: string | null }) {
+  const ageHrs = asOf ? Math.round((Date.now() - new Date(asOf).getTime()) / 3600000) : null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex items-center ml-1 align-middle text-orange-500/80 hover:text-orange-500 cursor-help"
+          onClick={e => e.stopPropagation()}
+        >
+          <AlertTriangle className="w-3 h-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[260px] text-left leading-relaxed">
+        Quote is stale — last tick {ageHrs !== null ? `${ageHrs}h ago` : "unknown"}
+        {asOf && <div className="font-mono text-[10px] text-muted-foreground mt-0.5">{new Date(asOf).toLocaleString()}</div>}
+        <div className="text-xs text-muted-foreground mt-1">Common for thinly traded OTC listings. 24h change suppressed.</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // -
 
 function MNavBadge({ value }: { value: number | null }) {
@@ -320,6 +341,7 @@ function CompanyRow({
           <div className="font-mono text-sm text-foreground tabular-nums inline-flex items-center justify-end">
             {company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"}
             {company.priceConfidence === "HARDCODED" && <HardcodedWarn />}
+            {company.priceConfidence === "STALE" && <StaleWarn asOf={company.priceAsOf} />}
           </div>
           <div className={`font-mono text-xs tabular-nums mt-0.5 ${chg.up ? "text-up" : "text-down"}`}>
             {chg.text}

@@ -64,7 +64,8 @@ export interface CompanyData {
   fdMarketCapUsd: number | null;
   btcTreasuryUsd: number | null;
   netDebtUsd: number;
-  priceConfidence: "LIVE" | "FALLBACK" | "HARDCODED";
+  priceConfidence: "LIVE" | "STALE" | "FALLBACK" | "HARDCODED";
+  priceAsOf: string | null;
   btcConfidence: "LIVE" | "FALLBACK" | "HARDCODED";
 }
 
@@ -311,31 +312,62 @@ async function fetchBtcPrice(fx: FxRates): Promise<BtcPrice> {
 
 // ── Stock Prices ──────────────────────────────────────────────────────────────
 
-async function fetchStockPrice(ticker: string): Promise<{ price: number; change: number; currency: string } | null> {
+async function fetchStockPrice(ticker: string): Promise<{ price: number; change: number; currency: string; stale: boolean; asOf: string | null } | null> {
   try {
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`;
     const res = await axios.get(url, {
       timeout: 8000,
       headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
     });
-    const meta = res.data?.chart?.result?.[0]?.meta;
+    const result = res.data?.chart?.result?.[0];
+    const meta = result?.meta;
     if (!meta?.regularMarketPrice) {
       console.warn(`[stock] ${ticker} yahoo returned no price`);
       return null;
     }
     const price = meta.regularMarketPrice;
-    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
-    const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
-    return { price, change, currency: meta.currency ?? "USD" };
+
+    // Compute 24h change from the two most recent non-null daily closes, not
+    // meta.chartPreviousClose — on a 5d range that field is the close 5 days
+    // ago, which inflates the "24h" change by the full 5-day move. If we only
+    // have one usable close, fall back to regularMarketPreviousClose (true
+    // prior-session close) and last to 0.
+    const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close ?? [];
+    const series = closes.filter((c): c is number => typeof c === "number" && c > 0);
+    let change = 0;
+    if (series.length >= 2) {
+      const last = series[series.length - 1]!;
+      const prev = series[series.length - 2]!;
+      change = prev > 0 ? ((last - prev) / prev) * 100 : 0;
+    } else if (typeof meta.regularMarketPreviousClose === "number" && meta.regularMarketPreviousClose > 0) {
+      change = ((price - meta.regularMarketPreviousClose) / meta.regularMarketPreviousClose) * 100;
+    }
+
+    // Stale quote detection: some tickers (OTC pink sheets like HOGPF) trade
+    // thinly and Yahoo keeps serving the last tick for days/weeks with
+    // regularMarketTime frozen. Anything older than 4 days (covers a 3-day
+    // weekend + 1-day gap) is treated as stale so the dashboard doesn't
+    // present a multi-week-old price as live.
+    const tickTs = typeof meta.regularMarketTime === "number" ? meta.regularMarketTime * 1000 : null;
+    const ageMs = tickTs ? Date.now() - tickTs : 0;
+    const stale = tickTs !== null && ageMs > 4 * 24 * 60 * 60 * 1000;
+    const asOf = tickTs ? new Date(tickTs).toISOString() : null;
+    if (stale) {
+      console.warn(`[stock] ${ticker} quote is stale: asOf=${asOf} (age=${Math.round(ageMs / 3600000)}h)`);
+    }
+
+    return { price, change, currency: meta.currency ?? "USD", stale, asOf };
   } catch (e) {
     console.warn(`[stock] ${ticker} yahoo failed:`, (e as Error).message);
     return null;
   }
 }
 
-async function fetchStockPrices(tickers: string[]): Promise<Record<string, { price: number; change: number; currency: string }>> {
+type StockQuote = { price: number; change: number; currency: string; stale: boolean; asOf: string | null };
+
+async function fetchStockPrices(tickers: string[]): Promise<Record<string, StockQuote>> {
   const results = await Promise.allSettled(tickers.map(t => fetchStockPrice(t)));
-  const result: Record<string, { price: number; change: number; currency: string }> = {};
+  const result: Record<string, StockQuote> = {};
   for (let i = 0; i < tickers.length; i++) {
     const r = results[i];
     if (r.status === "fulfilled" && r.value) {
@@ -933,8 +965,13 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
 
     let priceLocal = stock?.price ?? null;
     let priceUsd = priceLocal ? toUsd(priceLocal, stock?.currency ?? meta.localCurrency) : null;
-    let change24h = stock?.change ?? null;
-    const priceConfidence: CompanyData["priceConfidence"] = stock ? "LIVE" : "HARDCODED";
+    let change24h: number | null = stock?.change ?? null;
+    const priceConfidence: CompanyData["priceConfidence"] =
+      !stock ? "HARDCODED" : stock.stale ? "STALE" : "LIVE";
+    const priceAsOf = stock?.asOf ?? null;
+    // Suppress 24h change when the quote is stale — the number it would show
+    // isn't a real day-over-day move.
+    if (stock?.stale) change24h = null;
 
     // Live data overrides — tiered by source authority
     let debtUsd = hc.debtUsd;
@@ -1027,6 +1064,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
       btcTreasuryUsd,
       netDebtUsd,
       priceConfidence,
+      priceAsOf,
       btcConfidence,
     });
   }
@@ -1044,7 +1082,12 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
   ];
 
   // Top-level freshness/confidence indicator.
-  const missingStocks = TICKER_ORDER.filter(t => !stockPrices[t]);
+  // A stale quote (e.g. OTC pink-sheet with no ticks for days) counts as
+  // "missing" for coverage purposes — the number is not live.
+  const missingStocks = TICKER_ORDER.filter(t => {
+    const q = stockPrices[t];
+    return !q || q.stale;
+  });
   const stocksStatus: DataStatus["stocks"] =
     missingStocks.length === 0 ? "LIVE"
     : missingStocks.length === TICKER_ORDER.length ? "FALLBACK"
