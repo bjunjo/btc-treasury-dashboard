@@ -121,6 +121,34 @@ function RiskBadge({ label }: { label: CompanyData["riskLabel"] }) {
 
 // -
 
+function DataStatusPill({ status }: { status: NonNullable<TreasuryData["status"]> }) {
+  const degraded = status.anyFallback;
+  const label = !degraded ? "LIVE"
+    : status.btc === "FALLBACK" ? "BTC FALLBACK"
+    : status.stocks === "FALLBACK" ? "STOCKS FALLBACK"
+    : "DEGRADED";
+  const cls = !degraded
+    ? "border-green-500/50 text-green-500 bg-green-500/10"
+    : "border-yellow-500/60 text-yellow-600 bg-yellow-500/10";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`inline-flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border cursor-help ${cls}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${degraded ? "bg-yellow-500" : "bg-green-500"}`} />
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[280px] text-left leading-relaxed font-mono text-xs space-y-0.5">
+        <div>BTC: <span className={status.btc === "LIVE" ? "text-green-500" : "text-yellow-500"}>{status.btc}</span> <span className="text-muted-foreground">({status.btcSource})</span></div>
+        <div>Stocks: <span className={status.stocks === "LIVE" ? "text-green-500" : "text-yellow-500"}>{status.stocks}</span> <span className="text-muted-foreground">({status.stockCoverage.live}/{status.stockCoverage.total} live)</span></div>
+        {status.stockCoverage.missing.length > 0 && (
+          <div className="text-muted-foreground">Missing: {status.stockCoverage.missing.join(", ")}</div>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function HardcodedWarn() {
   return (
     <Tooltip>
@@ -189,24 +217,41 @@ function FxBar({ fx, kimchiPremium }: { fx: TreasuryData["fx"]; kimchiPremium: n
 // -
 
 function BtcStrip({ btc }: { btc: TreasuryData["btc"] }) {
-  const { text, up } = fmtPct(btc.change24h);
+  const isFallback = btc.confidence === "FALLBACK";
+  const { text, up } = fmtPct(isFallback ? null : btc.change24h);
   return (
-    <div className="border-b border-border bg-card">
+    <div className={`border-b border-border ${isFallback ? "bg-yellow-500/10" : "bg-card"}`}>
       <div className="container py-2.5 flex items-center justify-between gap-4">
         {/* Left: BTC USD price */}
         <div className="flex items-center gap-3">
           <Bitcoin className="w-5 h-5 text-btc flex-shrink-0" />
           <div>
-            <span className="font-mono text-xl font-bold text-foreground tabular-nums">
+            <span className={`font-mono text-xl font-bold tabular-nums ${isFallback ? "text-muted-foreground line-through decoration-yellow-500/60" : "text-foreground"}`}>
               {fmtUsd(btc.usd)}
             </span>
-            <span className={`ml-2 font-mono text-sm tabular-nums ${up ? "text-up" : "text-down"}`}>
-              {up
-                ? <TrendingUp className="inline w-3.5 h-3.5 mr-0.5" />
-                : <TrendingDown className="inline w-3.5 h-3.5 mr-0.5" />
-              }
-              {text}
-            </span>
+            {isFallback ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-2 inline-flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-yellow-500/60 text-yellow-600 bg-yellow-500/10 cursor-help">
+                    <AlertTriangle className="w-3 h-3" />
+                    Fallback
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-left leading-relaxed">
+                  Live BTC price sources (CoinGecko, Binance, Coinbase) all failed.
+                  Displayed value is a last-known placeholder and 24h change is suppressed —
+                  treasury value, mNAV and kimchi premium are unreliable until live data returns.
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className={`ml-2 font-mono text-sm tabular-nums ${up ? "text-up" : "text-down"}`}>
+                {up
+                  ? <TrendingUp className="inline w-3.5 h-3.5 mr-0.5" />
+                  : <TrendingDown className="inline w-3.5 h-3.5 mr-0.5" />
+                }
+                {text}
+              </span>
+            )}
           </div>
         </div>
 
@@ -724,6 +769,7 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            {data?.status && <DataStatusPill status={data.status} />}
             {lastUpdatedRef.current && (
               <span className="hidden sm:block text-xs text-muted-foreground font-mono">
                 {new Date(lastUpdatedRef.current).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}

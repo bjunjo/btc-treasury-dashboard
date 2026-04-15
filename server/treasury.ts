@@ -36,6 +36,10 @@ export interface BtcPrice {
   krwUpbit: number | null;
   change24h: number;
   kimchiPremium: number | null;
+  confidence: "LIVE" | "FALLBACK";
+  source: string;       // "coingecko" | "binance" | "coinbase" | "fallback"
+  krwSource: "upbit" | "derived" | "unavailable";
+  fetchedAt: string;    // ISO timestamp of the attempt
 }
 
 export interface CompanyData {
@@ -76,18 +80,30 @@ export interface Disclosure {
   url: string | null;
 }
 
+export interface DataStatus {
+  btc: "LIVE" | "FALLBACK";
+  btcSource: string;
+  stocks: "LIVE" | "PARTIAL" | "FALLBACK";
+  stockCoverage: { live: number; total: number; missing: string[] };
+  anyFallback: boolean;
+}
+
 export interface TreasuryData {
   btc: BtcPrice;
   fx: FxRates;
   companies: CompanyData[];
   disclosures: Disclosure[];
+  status: DataStatus;
   lastUpdated: string;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
 
 let _cache: { data: TreasuryData; ts: number } | null = null;
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — BTC holdings change weekly at most; prices tolerate 30min lag
+// Cache TTL is dynamic: long when all live sources succeeded, short when we
+// fell back so a transient upstream outage doesn't pin stale data for 30 min.
+const CACHE_TTL_LIVE_MS = 30 * 60 * 1000;     // 30 min — all-live response
+const CACHE_TTL_FALLBACK_MS = 2 * 60 * 1000;  // 2 min — any fallback present, retry sooner
 
 // ── Hardcoded fallback data ──────────────────────────────────────────────────
 
@@ -158,41 +174,136 @@ async function fetchFxRates(): Promise<FxRates> {
 }
 
 // ── BTC Price ─────────────────────────────────────────────────────────────────
+// We try multiple live sources in order. CoinGecko's free tier rate-limits
+// aggressively (HTTP 429) and occasionally 5xx's, which is the historical
+// reason the dashboard would pin at $68,000 with 0% change. Binance and
+// Coinbase are independent backups so a single upstream outage no longer
+// silently degrades the dashboard.
 
-async function fetchBtcPrice(fx: FxRates): Promise<BtcPrice> {
-  let usd = 68000;
-  let change24h = 0;
-  let krwRef = usd * fx.usdKrw;
-  let krwUpbit: number | null = null;
-  let kimchiPremium: number | null = null;
+const BTC_FALLBACK_USD = 68000;
 
+type BtcLive = { usd: number; change24h: number; krw: number | null };
+
+async function fetchBtcFromCoingecko(): Promise<BtcLive | null> {
   try {
     const res = await axios.get(
       "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,krw&include_24hr_change=true",
-      { timeout: 8000 }
+      { timeout: 8000, headers: { Accept: "application/json" } }
     );
-    const data = res.data.bitcoin;
-    usd = data.usd;
-    change24h = data.usd_24h_change ?? 0;
-    krwRef = data.krw;
-  } catch {
-    // use fallback
+    const data = res.data?.bitcoin;
+    if (!data || typeof data.usd !== "number" || data.usd <= 0) return null;
+    return {
+      usd: data.usd,
+      change24h: typeof data.usd_24h_change === "number" ? data.usd_24h_change : 0,
+      krw: typeof data.krw === "number" ? data.krw : null,
+    };
+  } catch (e) {
+    console.warn("[btc] coingecko failed:", (e as Error).message);
+    return null;
+  }
+}
+
+async function fetchBtcFromBinance(): Promise<BtcLive | null> {
+  try {
+    const res = await axios.get(
+      "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
+      { timeout: 6000, headers: { Accept: "application/json" } }
+    );
+    const usd = parseFloat(res.data?.lastPrice);
+    const change24h = parseFloat(res.data?.priceChangePercent);
+    if (!isFinite(usd) || usd <= 0) return null;
+    return { usd, change24h: isFinite(change24h) ? change24h : 0, krw: null };
+  } catch (e) {
+    console.warn("[btc] binance failed:", (e as Error).message);
+    return null;
+  }
+}
+
+async function fetchBtcFromCoinbase(): Promise<BtcLive | null> {
+  // Coinbase spot + 24h stats. No single endpoint returns both, so we compose.
+  try {
+    const [spot, stats] = await Promise.allSettled([
+      axios.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", { timeout: 6000 }),
+      axios.get("https://api.exchange.coinbase.com/products/BTC-USD/stats", { timeout: 6000 }),
+    ]);
+    if (spot.status !== "fulfilled") return null;
+    const usd = parseFloat(spot.value.data?.data?.amount);
+    if (!isFinite(usd) || usd <= 0) return null;
+    let change24h = 0;
+    if (stats.status === "fulfilled") {
+      const last = parseFloat(stats.value.data?.last);
+      const open = parseFloat(stats.value.data?.open);
+      if (isFinite(last) && isFinite(open) && open > 0) {
+        change24h = ((last - open) / open) * 100;
+      }
+    }
+    return { usd, change24h, krw: null };
+  } catch (e) {
+    console.warn("[btc] coinbase failed:", (e as Error).message);
+    return null;
+  }
+}
+
+async function fetchBtcPrice(fx: FxRates): Promise<BtcPrice> {
+  const fetchedAt = new Date().toISOString();
+
+  // Try sources in order: CoinGecko (has KRW + change), Binance, Coinbase.
+  let live: BtcLive | null = await fetchBtcFromCoingecko();
+  let source = "coingecko";
+  if (!live) {
+    live = await fetchBtcFromBinance();
+    source = "binance";
+  }
+  if (!live) {
+    live = await fetchBtcFromCoinbase();
+    source = "coinbase";
   }
 
+  // Upbit — independent, used for kimchi premium. Failure is non-fatal.
+  let krwUpbit: number | null = null;
   try {
     const upbit = await axios.get(
       "https://api.upbit.com/v1/ticker?markets=KRW-BTC",
       { timeout: 6000, headers: { Accept: "application/json" } }
     );
-    krwUpbit = upbit.data[0]?.trade_price ?? null;
-    if (krwUpbit && krwRef) {
-      kimchiPremium = ((krwUpbit - krwRef) / krwRef) * 100;
-    }
-  } catch {
-    // upbit optional
+    const px = upbit.data?.[0]?.trade_price;
+    if (typeof px === "number" && px > 0) krwUpbit = px;
+  } catch (e) {
+    console.warn("[btc] upbit failed:", (e as Error).message);
   }
 
-  return { usd, krwUpbit, change24h, kimchiPremium };
+  if (!live) {
+    console.error("[btc] ALL live sources failed (coingecko+binance+coinbase) — serving FALLBACK");
+    const usd = BTC_FALLBACK_USD;
+    const krwRef = usd * fx.usdKrw;
+    const kimchiPremium = krwUpbit ? ((krwUpbit - krwRef) / krwRef) * 100 : null;
+    return {
+      usd,
+      krwUpbit,
+      change24h: 0,
+      kimchiPremium,
+      confidence: "FALLBACK",
+      source: "fallback",
+      krwSource: krwUpbit ? "upbit" : "unavailable",
+      fetchedAt,
+    };
+  }
+
+  const krwRef = live.krw ?? live.usd * fx.usdKrw;
+  const kimchiPremium = krwUpbit && krwRef ? ((krwUpbit - krwRef) / krwRef) * 100 : null;
+
+  console.info(`[btc] live=${source} usd=${live.usd.toFixed(0)} chg24h=${live.change24h.toFixed(2)}% upbit=${krwUpbit ? "ok" : "miss"}`);
+
+  return {
+    usd: live.usd,
+    krwUpbit,
+    change24h: live.change24h,
+    kimchiPremium,
+    confidence: "LIVE",
+    source,
+    krwSource: krwUpbit ? "upbit" : (live.krw ? "derived" : "unavailable"),
+    fetchedAt,
+  };
 }
 
 // ── Stock Prices ──────────────────────────────────────────────────────────────
@@ -205,12 +316,16 @@ async function fetchStockPrice(ticker: string): Promise<{ price: number; change:
       headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
     });
     const meta = res.data?.chart?.result?.[0]?.meta;
-    if (!meta?.regularMarketPrice) return null;
+    if (!meta?.regularMarketPrice) {
+      console.warn(`[stock] ${ticker} yahoo returned no price`);
+      return null;
+    }
     const price = meta.regularMarketPrice;
     const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
     return { price, change, currency: meta.currency ?? "USD" };
-  } catch {
+  } catch (e) {
+    console.warn(`[stock] ${ticker} yahoo failed:`, (e as Error).message);
     return null;
   }
 }
@@ -769,9 +884,12 @@ function getRiskLabel(coverage: number | null, debtUsd: number): CompanyData["ri
 // ── Main Fetch ────────────────────────────────────────────────────────────────
 
 export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
-  // Return cached data if fresh (unless force-refresh requested)
-  if (!force && _cache && Date.now() - _cache.ts < CACHE_TTL_MS) {
-    return _cache.data;
+  // Return cached data if fresh. TTL is shortened when the last response
+  // contained fallback data so we retry upstream sooner rather than pinning
+  // a stale/degraded snapshot for a full 30 minutes.
+  if (!force && _cache) {
+    const ttl = _cache.data.status.anyFallback ? CACHE_TTL_FALLBACK_MS : CACHE_TTL_LIVE_MS;
+    if (Date.now() - _cache.ts < ttl) return _cache.data;
   }
 
   // Fetch all data in parallel
@@ -922,11 +1040,35 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     ...mfnDisclosures,
   ];
 
+  // Top-level freshness/confidence indicator.
+  const missingStocks = TICKER_ORDER.filter(t => !stockPrices[t]);
+  const stocksStatus: DataStatus["stocks"] =
+    missingStocks.length === 0 ? "LIVE"
+    : missingStocks.length === TICKER_ORDER.length ? "FALLBACK"
+    : "PARTIAL";
+
+  const status: DataStatus = {
+    btc: btc.confidence,
+    btcSource: btc.source,
+    stocks: stocksStatus,
+    stockCoverage: {
+      live: TICKER_ORDER.length - missingStocks.length,
+      total: TICKER_ORDER.length,
+      missing: missingStocks,
+    },
+    anyFallback: btc.confidence === "FALLBACK" || stocksStatus !== "LIVE",
+  };
+
+  if (status.anyFallback) {
+    console.warn(`[treasury] degraded response: btc=${status.btc} stocks=${status.stocks} missing=[${missingStocks.join(",")}]`);
+  }
+
   const data: TreasuryData = {
     btc,
     fx,
     companies,
     disclosures,
+    status,
     lastUpdated: new Date().toISOString(),
   };
 
