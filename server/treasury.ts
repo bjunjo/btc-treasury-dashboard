@@ -156,17 +156,20 @@ async function fetchFxRate(symbol: string): Promise<number | null> {
 async function fetchFxRates(): Promise<FxRates> {
   const fallback: FxRates = { usdKrw: 1350, usdJpy: 150, gbpUsd: 1.27, usdSek: 10.5 };
   try {
-    const [krwUsd, jpyUsd, gbpUsd, sekUsd] = await Promise.all([
-      fetchFxRate("KRWUSD=X"),
-      fetchFxRate("JPYUSD=X"),
+    // Query the direct pair for each rate. Yahoo truncates inverted pairs
+    // (KRWUSD=X, JPYUSD=X, SEKUSD=X) to 4 decimals, so inverting gives a
+    // badly rounded rate (e.g. 0.0007 -> 1428.57 KRW/USD instead of 1472.48).
+    const [usdKrw, usdJpy, gbpUsd, usdSek] = await Promise.all([
+      fetchFxRate("USDKRW=X"),
+      fetchFxRate("USDJPY=X"),
       fetchFxRate("GBPUSD=X"),
-      fetchFxRate("SEKUSD=X"),
+      fetchFxRate("USDSEK=X"),
     ]);
     return {
-      usdKrw: krwUsd ? 1 / krwUsd : fallback.usdKrw,
-      usdJpy: jpyUsd ? 1 / jpyUsd : fallback.usdJpy,
+      usdKrw: usdKrw ?? fallback.usdKrw,
+      usdJpy: usdJpy ?? fallback.usdJpy,
       gbpUsd: gbpUsd ?? fallback.gbpUsd,
-      usdSek: sekUsd ? 1 / sekUsd : fallback.usdSek,
+      usdSek: usdSek ?? fallback.usdSek,
     };
   } catch {
     return fallback;

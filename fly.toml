@@ -11,10 +11,12 @@ primary_region = 'iad'
 [http_service]
   internal_port = 3000
   force_https = true
-  # 'suspend' keeps RAM/disk warm — wake is ~1-2s vs ~10-30s for 'stop'.
-  # min_machines_running=1 alone doesn't reliably prevent suspension on a
-  # single-machine app, so we use suspend to make cold starts tolerable.
-  auto_stop_machines = 'suspend'
+  # Single-machine app: keep it running 24/7 to eliminate cold-start latency.
+  # `min_machines_running=1` alone doesn't reliably prevent suspension on
+  # single-machine apps, so we set `auto_stop_machines='off'` explicitly.
+  # Trade-off: ~$3–4/mo for an always-on shared-cpu-1x:512MB vs unpredictable
+  # 5–95s wake on idle. Worth it for a public dashboard.
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
   processes = ['app']
