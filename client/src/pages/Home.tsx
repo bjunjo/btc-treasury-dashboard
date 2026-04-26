@@ -331,7 +331,23 @@ function CompanyRow({
             <span className="text-lg leading-none">{company.flag}</span>
             <div>
               <div className="font-semibold text-foreground text-sm leading-tight">{company.name}</div>
-              <div className="font-mono text-xs text-muted-foreground mt-0.5">{company.ticker}</div>
+              <div className="font-mono text-xs text-muted-foreground mt-0.5">
+                {company.ticker}
+                {/* Share price — shown only on mobile, where the Price column is hidden */}
+                <span className="sm:hidden">
+                  <span className="mx-1.5 text-muted-foreground/40">·</span>
+                  <span className="text-foreground tabular-nums">
+                    {company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"}
+                  </span>
+                  {company.priceConfidence === "HARDCODED" && <HardcodedWarn />}
+                  {company.priceConfidence === "STALE" && <StaleWarn asOf={company.priceAsOf} />}
+                  {company.change24h !== null && (
+                    <span className={`ml-1.5 tabular-nums ${chg.up ? "text-up" : "text-down"}`}>
+                      {chg.text}
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
         </td>
@@ -464,9 +480,7 @@ function CompanyRow({
 
             {/* Mobile-only fields */}
             <div className="sm:hidden grid grid-cols-2 gap-3 mb-4">
-              <DetailStat label="Price (USD)" value={company.priceUsd !== null ? fmtUsd(company.priceUsd) : "—"} />
               <DetailStat label="Mkt Cap (FD)" value={fmtMktCap(company.fdMarketCapUsd)} />
-              <DetailStat label="24h Change" value={chg.text} valueClass={chg.up ? "text-up" : "text-down"} />
               <DetailStat label="mNAV (EV)" value={company.mNavEv !== null ? `${company.mNavEv.toFixed(2)}x` : "—"} />
             </div>
 
