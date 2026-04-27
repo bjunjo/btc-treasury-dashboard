@@ -123,10 +123,10 @@ const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: n
   //   Source: Note 24, Annual Report 2025 (year-end Oct 31 2025, filed 2026-02-19)
   //   GBP/USD ~1.295 (Mar 2026); update when next annual report is filed (Oct 2026)
   "SWC.L":  { btc: 2_689,    sharesDiluted: 398_869_927,  debtUsd: 14_190_564,    cashUsd: 615_218 },
-  // Nakamoto Inc.: 5,342 BTC (Dec 31 2025, Q4 earnings press release filed 2026-03-30)
+  // Nakamoto Inc.: 5,058 BTC (post-sale of 284 BTC in Mar 2026; original Q4 2025 was 5,342 BTC)
   // Fully diluted shares: 892,723,518 as of Mar 27 2026 (common 690,018,254 + options 78,714,493 + pre-funded warrants 61,704,975 + holdback shares 27,483,604 + RSUs 17,636,822 + letters of transmittal 16,678,652 + cash warrants 486,718)
-  // Source: Nakamoto Inc. Exhibit 99.1, SEC EDGAR, filed 2026-03-30
-  NAKA:   { btc: 5_342,    sharesDiluted: 892_723_518,  debtUsd: 214_859_489,   cashUsd: 24_185_083 },
+  // Source: Nakamoto Inc. Exhibit 99.1, SEC EDGAR, filed 2026-03-30 + treasury.bjunjo.com verified 2026-04-27
+  NAKA:   { btc: 5_058,    sharesDiluted: 892_723_518,  debtUsd: 209_600_000,   cashUsd: 24_185_083 },
 };
 
 const COMPANY_META: Record<string, { name: string; exchange: string; country: string; flag: string; localCurrency: string }> = {
@@ -1005,15 +1005,28 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
       }
     } else if (ticker === "NAKA") {
       // Nakamoto: prefer SEC filing text (S-3/8-K) > XBRL 10-Q > hardcoded
-      // SEC filing text is most current (updated on each S-3 or 8-K)
+      //
+      // BTC: SEC filing text is most current (updated on each S-3 or 8-K),
+      // but only override HARDCODED if SEC finds a HIGHER value (new purchase).
+      // If HARDCODED is lower (e.g. after a BTC sale not yet in a new filing),
+      // keep HARDCODED as the more accurate figure.
       if (nakaSecFilings.btc && nakaSecFilings.btc > 0) {
-        liveBtcHeld = nakaSecFilings.btc;
-        btcConfidence = "LIVE";
+        if (nakaSecFilings.btc > hc.btc) {
+          liveBtcHeld = nakaSecFilings.btc;
+          btcConfidence = "LIVE";
+        }
+        // else: SEC text is stale (pre-sale), keep HARDCODED
       } else if (nakaXbrl.btc && nakaXbrl.btc > 0) {
-        liveBtcHeld = nakaXbrl.btc;
-        btcConfidence = "LIVE";
+        if (nakaXbrl.btc > hc.btc) {
+          liveBtcHeld = nakaXbrl.btc;
+          btcConfidence = "LIVE";
+        }
       }
-      if (nakaXbrl.shares && nakaXbrl.shares > 0) {
+      // Shares: Do NOT override with XBRL CommonStockSharesOutstanding —
+      // that field returns BASIC shares (437M from 10-K), not fully diluted
+      // (892M from S-3). HARDCODED FD count is more accurate.
+      // Only override if XBRL provides a significantly higher value (new dilution event).
+      if (nakaXbrl.shares && nakaXbrl.shares > 0 && nakaXbrl.shares > hc.sharesDiluted * 1.5) {
         liveSharesDiluted = nakaXbrl.shares;
       }
     }
