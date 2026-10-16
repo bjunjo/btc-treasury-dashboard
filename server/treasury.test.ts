@@ -42,7 +42,7 @@ function calcBtcCoverage(btcTreasuryUsd: number, debtUsd: number): number | null
 function toUsd(
   price: number,
   currency: string,
-  fx: { usdKrw: number; usdJpy: number; gbpUsd: number; usdSek: number }
+  fx: { usdKrw: number; usdJpy: number; gbpUsd: number; usdSek: number; eurUsd?: number; usdBrl?: number }
 ): number {
   if (currency === "USD") return price;
   if (currency === "JPY") return price / fx.usdJpy;
@@ -219,5 +219,36 @@ describe("BTC per share calculations", () => {
     const btcPerShare = btcHeld / shares;
     const sats = btcPerShare * 1e8;
     expect(sats).toBeCloseTo(680, 0);
+  });
+});
+
+import { parseOranjeDashboard } from "./treasury";
+
+describe("parseOranjeDashboard", () => {
+  it("parses the company dashboard feed", () => {
+    const r = parseOranjeDashboard({
+      data: {
+        btcHoldings: { value: 3950 },
+        outstandingCommonShares: { value: 140659580 },
+        netDebt: { value: 42882241 },
+      },
+    });
+    expect(r).toEqual({ btc: 3950, shares: 140659580, netDebtUsd: 42882241 });
+  });
+  it("rejects implausible values", () => {
+    expect(parseOranjeDashboard({ data: { btcHoldings: { value: 0 } } })).toBeNull();
+    expect(parseOranjeDashboard(null)).toBeNull();
+  });
+});
+
+describe("new company math", () => {
+  it("Capital B BTC/share matches company KPI (7,368.5 sats)", () => {
+    expect((3538 / 48_014_921) * 1e8).toBeCloseTo(7368.5, 0);
+  });
+  it("OranjeBTC BTC/share matches company KPI (2,808 sats)", () => {
+    expect(Math.round((3950 / 140_659_580) * 1e8)).toBe(2808);
+  });
+  it("NAKA FD share count is post 1-for-40 reverse split", () => {
+    expect(Math.round((4467 / 22_361_728) * 1e8)).toBe(19976);
   });
 });
