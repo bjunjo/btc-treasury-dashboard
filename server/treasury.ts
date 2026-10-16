@@ -59,6 +59,8 @@ export interface CompanyData {
   btcPerShare: number | null;
   btcPerShareSats: number | null;
   mNavEv: number | null;
+  prefUsd: number;
+  mNavSource: "OFFICIAL" | "EV" | null;
   btcCoverage: number | null;
   riskLabel: "LOW" | "MOD" | "HIGH" | "CRIT" | "NONE";
   fdMarketCapUsd: number | null;
@@ -110,7 +112,7 @@ const CACHE_TTL_FALLBACK_MS = 2 * 60 * 1000;  // 2 min — any fallback present,
 
 const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: number; cashUsd: number }> = {
   // Strategy: 762,099 BTC (Mar 27 2026, bitbo.io); ~254M basic shares; BTC & debt live-fetched from strategy.com API
-  MSTR:   { btc: 762_099,  sharesDiluted: 254_000_000,  debtUsd: 8_190_155_000, cashUsd: 57_000_000 },
+  MSTR:   { btc: 848_250,  sharesDiluted: 451_800_000,  debtUsd: 6_714_000_000, cashUsd: 57_000_000 },
   // Metaplanet: 35,102 BTC (FY2025 audited, Dec 31 2025); 1,166,776,726 shares (Feb 28 2026 TSE filing)
   "3350.T": { btc: 35_102,   sharesDiluted: 1_166_776_726, debtUsd: 275_000_000,   cashUsd: 5_000_000 },
   // H100 Group: 1,051 BTC (post-balance-sheet, Q4 2025 report filed 2026-02-24);
@@ -398,6 +400,8 @@ interface MstrLiveData {
   evUsd: number | null;          // live enterprise value from mstrKpiData
   debtUsd: number;
   prefUsd: number;               // preferred stock value
+  sharesDiluted: number | null;  // derived: btcHoldings / (satsPerShare / 1e8)
+  mNavOfficial: number | null;   // strategy.com published mNAV
   cashUsd: number;
 }
 
@@ -409,6 +413,8 @@ async function fetchMstrLiveData(): Promise<MstrLiveData> {
     debtUsd: HARDCODED.MSTR.debtUsd,
     prefUsd: 0,
     cashUsd: HARDCODED.MSTR.cashUsd,
+    sharesDiluted: null,
+    mNavOfficial: null,
   };
 
   const headers = {
@@ -426,10 +432,19 @@ async function fetchMstrLiveData(): Promise<MstrLiveData> {
 
     // Parse BTC holdings from bitcoinKpis
     let btcHeld = HARDCODED.MSTR.btc;
+    let sharesDiluted: number | null = null;
+    let mNavOfficial: number | null = null;
     if (kpisRes.status === "fulfilled") {
       const r = kpisRes.value.data?.results ?? {};
       const parsed = parseInt(String(r.btcHoldings ?? "").replace(/,/g, ""), 10);
       if (!isNaN(parsed) && parsed > 0) btcHeld = parsed;
+      // Share count: Strategy publishes sats/share; shares = BTC / (sats/1e8)
+      const sps = Number(r.satsPerShare);
+      if (Number.isFinite(sps) && sps > 0 && btcHeld > 0) {
+        sharesDiluted = Math.round(btcHeld / (sps / 1e8));
+      }
+      const mn = Number(r.mNav);
+      if (Number.isFinite(mn) && mn > 0) mNavOfficial = mn;
     }
 
     // Parse market cap, EV, debt, preferred from mstrKpiData
@@ -454,7 +469,13 @@ async function fetchMstrLiveData(): Promise<MstrLiveData> {
       }
     }
 
-    return { btcHeld, marketCapUsd, evUsd, debtUsd, prefUsd, cashUsd: 0 };
+    // Cash implied by Strategy's EV bridge: EV = mcap + debt + pref - cash
+    let cashUsd = 0;
+    if (marketCapUsd && evUsd) {
+      const implied = marketCapUsd + debtUsd + prefUsd - evUsd;
+      if (implied > 0) cashUsd = implied;
+    }
+    return { btcHeld, marketCapUsd, evUsd, debtUsd, prefUsd, cashUsd, sharesDiluted, mNavOfficial };
   } catch {
     return fallback;
   }
@@ -981,6 +1002,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     let liveMarketCapUsd: number | null = null;
     let liveEvUsd: number | null = null;
     let livePrefUsd = 0;
+    let liveMNavOfficial: number | null = null;
     let btcConfidence: CompanyData["btcConfidence"] = "HARDCODED";
 
     if (ticker === "MSTR") {
@@ -993,6 +1015,8 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
       liveMarketCapUsd = mstrLive.marketCapUsd;
       liveEvUsd = mstrLive.evUsd;
       livePrefUsd = mstrLive.prefUsd;
+      if (mstrLive.sharesDiluted) liveSharesDiluted = mstrLive.sharesDiluted;
+      liveMNavOfficial = mstrLive.mNavOfficial;
       btcConfidence = "LIVE";
     } else if (ticker === "3350.T" || ticker === "HOGPF" || ticker === "SWC.L") {
       // Metaplanet, H100, SWC: official StrategyTracker partner data feed
@@ -1047,9 +1071,13 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     // For others: EV = FD Market Cap + Net Debt (standard formula).
     let mNavEv: number | null = null;
     if (btcTreasuryUsd > 0) {
-      const ev = liveEvUsd ?? (fdMarketCapUsd ? fdMarketCapUsd + netDebtUsd : null);
+      // EV includes preferreds: EV = mcap + debt + pref - cash
+      const ev = liveEvUsd ?? (fdMarketCapUsd ? fdMarketCapUsd + netDebtUsd + livePrefUsd : null);
       if (ev) mNavEv = ev / btcTreasuryUsd;
     }
+    // Prefer the issuer's published mNAV when available (primary source)
+    let mNavSource: CompanyData["mNavSource"] = mNavEv != null ? "EV" : null;
+    if (liveMNavOfficial != null) { mNavEv = liveMNavOfficial; mNavSource = "OFFICIAL"; }
 
     const btcCoverage = debtUsd > 0 ? btcTreasuryUsd / debtUsd : null;
     const riskLabel = getRiskLabel(btcCoverage, debtUsd);
@@ -1071,6 +1099,8 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
       btcPerShare,
       btcPerShareSats,
       mNavEv,
+      prefUsd: livePrefUsd,
+      mNavSource,
       btcCoverage,
       riskLabel,
       fdMarketCapUsd,

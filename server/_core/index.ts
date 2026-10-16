@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { fetchTreasuryData } from "../treasury";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { registerSeoRoutes } from "./seo";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,8 @@ async function startServer() {
       createContext,
     })
   );
+  // SEO files must be registered before the SPA catch-all
+  registerSeoRoutes(app);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
