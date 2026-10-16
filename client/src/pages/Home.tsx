@@ -210,6 +210,8 @@ function FxBar({ fx, kimchiPremium }: { fx: TreasuryData["fx"]; kimchiPremium: n
     fmtFx("USD/JPY", fx.usdJpy, "¥", 2),
     fmtFx("GBP/USD", fx.gbpUsd, "$", 4),
     fmtFx("USD/SEK", fx.usdSek, "kr", 2),
+    fmtFx("EUR/USD", fx.eurUsd, "$", 4),
+    fmtFx("USD/BRL", fx.usdBrl, "R$", 2),
   ];
 
   return (
@@ -473,7 +475,7 @@ function CompanyRow({
               />
               <DetailStat label="Price (local)" value={
                 company.priceLocal !== null
-                  ? `${company.localCurrency === "GBp" ? "p" : company.localCurrency === "JPY" ? "¥" : company.localCurrency === "SEK" ? "kr" : "$"}${company.priceLocal.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                  ? `${company.localCurrency === "GBp" ? "p" : company.localCurrency === "JPY" ? "¥" : company.localCurrency === "SEK" ? "kr" : company.localCurrency === "EUR" ? "€" : company.localCurrency === "BRL" ? "R$" : "$"}${company.priceLocal.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
                   : "—"
               } />
             </div>
@@ -934,9 +936,6 @@ export default function Home() {
           </table>
         </div>
 
-        {/* On the Radar — companies we're watching but not yet fully tracking */}
-        <OnTheRadar />
-
         {/* Disclosure feed */}
         {data && <DisclosureFeed disclosures={data.disclosures} companies={data.companies} />}
 
@@ -954,7 +953,7 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">
-              Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR
+              Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR · Capital B (Actusnews) · OranjeBTC dashboard / CVM
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Auto-refreshes every 5 min
@@ -969,35 +968,6 @@ export default function Home() {
 
 // -
 
-const RADAR: Array<{ name: string; flag: string; ticker: string; btc: number }> = [
-  { name: "Capital B",  flag: "🇫🇷", ticker: "ALCPB.PA / CPTLF", btc: 2888 },
-  { name: "OranjeBTC", flag: "🇧🇷", ticker: "OBTC3",              btc: 3708 },
-];
-
-function OnTheRadar() {
-  return (
-    <div className="mt-6">
-      <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-        On the Radar
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {RADAR.map(r => (
-          <div key={r.ticker} className="bg-card border border-border border-dashed rounded-lg px-3 py-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-lg leading-none">{r.flag}</span>
-              <div className="font-semibold text-sm text-foreground">{r.name}</div>
-              <span className="ml-auto font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Radar</span>
-            </div>
-            <div className="font-mono text-xs text-muted-foreground mb-1">{r.ticker}</div>
-            <div className="font-mono text-sm font-semibold text-btc tabular-nums">
-              {fmtBtc(r.btc)} <span className="text-muted-foreground/60 text-xs">approx.</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // -
 

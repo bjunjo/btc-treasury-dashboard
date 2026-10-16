@@ -29,6 +29,8 @@ export interface FxRates {
   usdJpy: number;
   gbpUsd: number;
   usdSek: number;
+  eurUsd: number;
+  usdBrl: number;
 }
 
 export interface BtcPrice {
@@ -125,10 +127,26 @@ const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: n
   //   Source: Note 24, Annual Report 2025 (year-end Oct 31 2025, filed 2026-02-19)
   //   GBP/USD ~1.295 (Mar 2026); update when next annual report is filed (Oct 2026)
   "SWC.L":  { btc: 2_689,    sharesDiluted: 398_869_927,  debtUsd: 14_190_564,    cashUsd: 615_218 },
-  // Nakamoto Inc.: 5,058 BTC (post-sale of 284 BTC in Mar 2026; original Q4 2025 was 5,342 BTC)
-  // Fully diluted shares: 892,723,518 as of Mar 27 2026 (common 690,018,254 + options 78,714,493 + pre-funded warrants 61,704,975 + holdback shares 27,483,604 + RSUs 17,636,822 + letters of transmittal 16,678,652 + cash warrants 486,718)
-  // Source: Nakamoto Inc. Exhibit 99.1, SEC EDGAR, filed 2026-03-30 + treasury.bjunjo.com verified 2026-04-27
-  NAKA:   { btc: 5_058,    sharesDiluted: 892_723_518,  debtUsd: 209_600_000,   cashUsd: 24_185_083 },
+  // Nakamoto Inc. (as of Jun 30 2026; 1-for-40 reverse split effective May 22 2026):
+  //   4,467 BTC; fully diluted shares 22,361,728 (common 17,894,943 + options 1,772,158 +
+  //   pre-funded warrants 1,092,624 + holdback shares 687,089 + RSUs + other, per company reconciliation);
+  //   debt $164.704M (165.0M USDT Kraken loan; = net debt $145.632M + cash $19.072M); cash $19.072M.
+  //   Source: Exhibit 99.1 to 8-K filed 2026-08-14 (Q2 2026 results) and 10-Q filed 2026-08-13, SEC EDGAR
+  //   https://www.sec.gov/Archives/edgar/data/1946573/000149315226038468/ex99-1.htm
+  NAKA:   { btc: 4_467,    sharesDiluted: 22_361_728,   debtUsd: 164_704_000,   cashUsd: 19_072_000 },
+  // Capital B (Euronext Growth Paris, ALCPB) — as of Sep 28 2026 press release (holdings reconfirmed Oct 15 2026):
+  //   3,538 BTC (strategic reserve; 61 operational BTC excluded, per company KPIs);
+  //   fully diluted shares 48,014,921 (company KPI basis, includes conversion of all BTC-denominated OCAs,
+  //   so OCA debt is treated as equity here → debtUsd 0 to avoid double counting); basic 38,467,809.
+  //   Cash €4.6M as of Sep 30 2026 (H1 2026 results release, Oct 15 2026), converted at EUR/USD 1.1255.
+  //   Sources: https://www.actusnews.com/news/100452-20260928-capital-b-cp-28-septembre-2026-en-final.pdf
+  //            https://cptlb.com/wp-content/uploads/2026/10/tqRoqfppJ0/20261015-Capital-B-CP-15-octobre-2026-EN-FINAL.pdf
+  "ALCPB.PA": { btc: 3_538, sharesDiluted: 48_014_921,  debtUsd: 0,             cashUsd: 5_177_300 },
+  // OranjeBTC (B3: OBTC3) — as of Oct 12 2026 market announcement (CVM/IR):
+  //   3,950 BTC; 140,659,580 common shares outstanding ex-treasury. Net debt US$42.88M from company dashboard API.
+  //   Live source: https://www.oranjebtc.com/api/dashboard?currency=usd (company's own dashboard feed)
+  //   Filing: https://filemanager-cdn.mziq.com/published/1c906e2c-8d06-4a32-a1a8-a240167c77f2/d4f145f4-d374-4e82-8ccb-c9023760988e
+  "OBTC3.SA": { btc: 3_950, sharesDiluted: 140_659_580, debtUsd: 42_882_241,    cashUsd: 0 },
 };
 
 const COMPANY_META: Record<string, { name: string; exchange: string; country: string; flag: string; localCurrency: string }> = {
@@ -137,9 +155,11 @@ const COMPANY_META: Record<string, { name: string; exchange: string; country: st
   HOGPF:    { name: "H100 Group",       exchange: "Nasdaq First North", country: "Sweden", flag: "🇸🇪", localCurrency: "SEK" },
   "SWC.L":  { name: "Smarter Web Co.", exchange: "LSE AIM",            country: "UK",     flag: "🇬🇧", localCurrency: "GBp" },
   NAKA:     { name: "Nakamoto Inc.",    exchange: "Nasdaq",             country: "USA",    flag: "🇺🇸", localCurrency: "USD" },
+  "ALCPB.PA": { name: "Capital B",      exchange: "Euronext Growth Paris", country: "France", flag: "🇫🇷", localCurrency: "EUR" },
+  "OBTC3.SA": { name: "OranjeBTC",      exchange: "B3",                 country: "Brazil", flag: "🇧🇷", localCurrency: "BRL" },
 };
 
-const TICKER_ORDER = ["MSTR", "3350.T", "NAKA", "SWC.L", "HOGPF"];
+const TICKER_ORDER = ["MSTR", "3350.T", "NAKA", "SWC.L", "HOGPF", "ALCPB.PA", "OBTC3.SA"];
 
 // ── FX Rates ─────────────────────────────────────────────────────────────────
 
@@ -157,22 +177,26 @@ async function fetchFxRate(symbol: string): Promise<number | null> {
 }
 
 async function fetchFxRates(): Promise<FxRates> {
-  const fallback: FxRates = { usdKrw: 1350, usdJpy: 150, gbpUsd: 1.27, usdSek: 10.5 };
+  const fallback: FxRates = { usdKrw: 1350, usdJpy: 150, gbpUsd: 1.27, usdSek: 10.5, eurUsd: 1.12, usdBrl: 5.1 };
   try {
     // Query the direct pair for each rate. Yahoo truncates inverted pairs
     // (KRWUSD=X, JPYUSD=X, SEKUSD=X) to 4 decimals, so inverting gives a
     // badly rounded rate (e.g. 0.0007 -> 1428.57 KRW/USD instead of 1472.48).
-    const [usdKrw, usdJpy, gbpUsd, usdSek] = await Promise.all([
+    const [usdKrw, usdJpy, gbpUsd, usdSek, eurUsd, usdBrl] = await Promise.all([
       fetchFxRate("USDKRW=X"),
       fetchFxRate("USDJPY=X"),
       fetchFxRate("GBPUSD=X"),
       fetchFxRate("USDSEK=X"),
+      fetchFxRate("EURUSD=X"),
+      fetchFxRate("USDBRL=X"),
     ]);
     return {
       usdKrw: usdKrw ?? fallback.usdKrw,
       usdJpy: usdJpy ?? fallback.usdJpy,
       gbpUsd: gbpUsd ?? fallback.gbpUsd,
       usdSek: usdSek ?? fallback.usdSek,
+      eurUsd: eurUsd ?? fallback.eurUsd,
+      usdBrl: usdBrl ?? fallback.usdBrl,
     };
   } catch {
     return fallback;
@@ -478,6 +502,38 @@ async function fetchMstrLiveData(): Promise<MstrLiveData> {
     return { btcHeld, marketCapUsd, evUsd, debtUsd, prefUsd, cashUsd, sharesDiluted, mNavOfficial };
   } catch {
     return fallback;
+  }
+}
+
+// ── OranjeBTC live data (company dashboard feed) ─────────────────────────────
+
+export interface OranjeLive { btc: number; shares: number; netDebtUsd: number }
+
+export function parseOranjeDashboard(json: any): OranjeLive | null {
+  const d = json?.data ?? json;
+  const num = (k: string) => {
+    const v = Number(d?.[k]?.value);
+    return Number.isFinite(v) ? v : null;
+  };
+  const btc = num("btcHoldings");
+  const shares = num("outstandingCommonShares") ?? num("sharesOutstanding");
+  const netDebt = num("netDebt");
+  // Sanity bounds guard against schema changes / bad values
+  if (!btc || btc < 1_000 || btc > 100_000) return null;
+  if (!shares || shares < 10_000_000 || shares > 2_000_000_000) return null;
+  if (netDebt == null || netDebt < 0 || netDebt > 1_000_000_000) return null;
+  return { btc, shares, netDebtUsd: netDebt };
+}
+
+async function fetchOranjeLive(): Promise<OranjeLive | null> {
+  try {
+    const res = await axios.get("https://www.oranjebtc.com/api/dashboard?currency=usd", {
+      timeout: 8000,
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", Accept: "application/json" },
+    });
+    return parseOranjeDashboard(res.data);
+  } catch {
+    return null;
   }
 }
 
@@ -949,7 +1005,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
   }
 
   // Fetch all data in parallel
-  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl, nakaSecFilings, mstrLive] = await Promise.all([
+  const [fx, stockPrices, tdnetDisclosures, lseDisclosure, mfnDisclosures, mstrEdgarDisclosures, nakaEdgarDisclosures, strategyTrackerData, nakaXbrl, nakaSecFilings, mstrLive, oranjeLive] = await Promise.all([
     fetchFxRates(),
     fetchStockPrices(TICKER_ORDER),
     fetchTdnetDisclosures(),
@@ -961,6 +1017,7 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     fetchNakaEdgarXbrl(),
     fetchNakaBtcFromSecFilings(),
     fetchMstrLiveData(),
+    fetchOranjeLive(),
   ]);
 
   const btc = await fetchBtcPrice(fx);
@@ -973,6 +1030,8 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
     if (currency === "GBP") return price * fx.gbpUsd;
     if (currency === "SEK") return price / fx.usdSek;
     if (currency === "KRW") return price / fx.usdKrw;
+    if (currency === "EUR") return price * fx.eurUsd;
+    if (currency === "BRL") return price / fx.usdBrl;
     return price;
   }
 
@@ -1028,30 +1087,19 @@ export async function fetchTreasuryData(force = false): Promise<TreasuryData> {
         btcConfidence = "LIVE";
       }
     } else if (ticker === "NAKA") {
-      // Nakamoto: prefer SEC filing text (S-3/8-K) > XBRL 10-Q > hardcoded
-      //
-      // BTC: SEC filing text is most current (updated on each S-3 or 8-K),
-      // but only override HARDCODED if SEC finds a HIGHER value (new purchase).
-      // If HARDCODED is lower (e.g. after a BTC sale not yet in a new filing),
-      // keep HARDCODED as the more accurate figure.
-      if (nakaSecFilings.btc && nakaSecFilings.btc > 0) {
-        if (nakaSecFilings.btc > hc.btc) {
-          liveBtcHeld = nakaSecFilings.btc;
-          btcConfidence = "LIVE";
-        }
-        // else: SEC text is stale (pre-sale), keep HARDCODED
-      } else if (nakaXbrl.btc && nakaXbrl.btc > 0) {
-        if (nakaXbrl.btc > hc.btc) {
-          liveBtcHeld = nakaXbrl.btc;
-          btcConfidence = "LIVE";
-        }
-      }
-      // Shares: Do NOT override with XBRL CommonStockSharesOutstanding —
-      // that field returns BASIC shares (437M from 10-K), not fully diluted
-      // (892M from S-3). HARDCODED FD count is more accurate.
-      // Only override if XBRL provides a significantly higher value (new dilution event).
-      if (nakaXbrl.shares && nakaXbrl.shares > 0 && nakaXbrl.shares > hc.sharesDiluted * 1.5) {
-        liveSharesDiluted = nakaXbrl.shares;
+      // Nakamoto: dated values from the latest SEC filings (see HARDCODED).
+      // The previous automatic overrides were removed: S-3/8-K text scraping only
+      // accepted HIGHER BTC counts (so post-sale reductions were ignored), XBRL
+      // CryptoAssetNumberOfUnits reports the *pledged* BTC (3,805), and XBRL share
+      // counts are basic & post-reverse-split (17.9M), not fully diluted.
+      // nakaXbrl/nakaSecFilings are still fetched for the disclosure pipeline only.
+    } else if (ticker === "OBTC3.SA") {
+      if (oranjeLive) {
+        liveBtcHeld = oranjeLive.btc;
+        liveSharesDiluted = oranjeLive.shares;
+        debtUsd = oranjeLive.netDebtUsd;
+        cashUsd = 0; // company reports NET debt
+        btcConfidence = "LIVE";
       }
     }
 
