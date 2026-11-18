@@ -12,7 +12,7 @@ This is a personal research watchlist. If it's useful to you, fork it.
 
 ## About the author
 
-**Billy Jo (조병준)** researches long-term investing and built this dashboard with AI as a non-developer — a working example of using AI to ship a real research tool.
+**빌리조** researches long-term investing and built this dashboard with AI as a non-developer — a working example of using AI to ship a real research tool.
 
 - Portfolio: [billyjo-portfolio.vercel.app](https://billyjo-portfolio.vercel.app)
 - YouTube: [youtube.com/@bjunjo](https://www.youtube.com/@bjunjo)
