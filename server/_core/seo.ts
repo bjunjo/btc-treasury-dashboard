@@ -21,14 +21,14 @@ export const LLMS_TXT = `# BTC Treasury Intelligence
 
 > Live dashboard of public companies holding Bitcoin as a treasury asset: BTC holdings, BTC per share, mNAV (enterprise value / BTC NAV, including debt and preferreds), debt coverage, and exchange disclosures.
 
-Companies tracked: Strategy (MSTR), Metaplanet (3350.T), Nakamoto (NAKA), The Smarter Web Company (SWC.L), H100 Group (HOGPF).
+Companies tracked: Strategy (MSTR), Metaplanet (3350.T), Nakamoto (NAKA), The Smarter Web Company (SWC.L), H100 Group (HOGPF), Capital B (ALCPB), OranjeBTC (OBTC3).
 
 ## Data
 - [Dashboard](${SITE_URL}/): human-readable live dashboard
 - [JSON API](${SITE_URL}/api/trpc/treasury.getData): machine-readable data (tRPC; payload under result.data.json)
 
 ## Sources
-Primary sources: strategy.com API, SEC EDGAR, TDnet / metaplanet.jp, London Stock Exchange, MFN (H100). Each value carries a confidence flag (LIVE / FALLBACK / HARDCODED). Not investment advice.
+Primary sources: strategy.com API, SEC EDGAR, metaplanet.jp English IR, London Stock Exchange, MFN (H100), Capital B press releases (Actusnews), OranjeBTC dashboard / CVM. Each value carries a confidence flag (LIVE / FALLBACK / HARDCODED). Not investment advice.
 `;
 
 export function registerSeoRoutes(app: Express): void {

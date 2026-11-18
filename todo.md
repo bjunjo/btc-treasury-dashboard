@@ -80,9 +80,9 @@
 - [x] First-visit modal: user must acknowledge disclaimer before viewing data
 
 ## New Companies (Future)
-- [ ] Capital B (cptlb.com): research exchange listing, country, official disclosure API
-- [ ] OrangeBTC (oranjebtc.com): research exchange listing, country, official disclosure API
-- [ ] Add both companies to watchlist once disclosure sources confirmed
+- [x] Capital B (ALCPB, Euronext Growth Paris): added to main watchlist; press releases via Actusnews / company IR
+- [x] OranjeBTC (OBTC3, B3): added to main watchlist; company dashboard API + CVM/IR
+- [x] Add both companies to watchlist once disclosure sources confirmed
 
 ## SEO Fixes
 - [x] Page title: extend to 30-60 characters ("BTC Treasury Intelligence — Live Bitcoin Holdings" = 49 chars)
