@@ -3,19 +3,16 @@
  *
  * Data sources (tiered by legal authority):
  *   Tier 0: Official exchange APIs (SEC EDGAR, MFN RSS, strategy.com)
- *   Tier 1: Official exchange scrapers (TDnet, LSE alldata)
+ *   Tier 1: Official sources / scrapers (metaplanet.jp English IR, LSE alldata)
  *   Tier 2: Yahoo Finance JSON (prices, FX rates)
  *   Tier 3: Hardcoded last-known-good values
  *
- * Cache: 5-minute TTL to avoid hammering APIs
+ * Cache: 30-minute TTL when all live sources succeed; 2-minute TTL if any fallback is present
  */
 
 import axios from "axios";
 import http from "node:http";
 import https from "node:https";
-import { parse as parseHtml } from "node-html-parser";
-import { invokeLLM } from "./_core/llm";
-
 // Keep-alive agents shared across all outbound HTTP calls. Saves one TCP+TLS
 // handshake per request against the same host — meaningful when we make 20+
 // calls per refresh to a handful of upstreams (SEC, CoinGecko, Yahoo, etc).
@@ -113,7 +110,7 @@ const CACHE_TTL_FALLBACK_MS = 2 * 60 * 1000;  // 2 min — any fallback present,
 // ── Hardcoded fallback data ──────────────────────────────────────────────────
 
 const HARDCODED: Record<string, { btc: number; sharesDiluted: number; debtUsd: number; cashUsd: number }> = {
-  // Strategy: 762,099 BTC (Mar 27 2026, bitbo.io); ~254M basic shares; BTC & debt live-fetched from strategy.com API
+  // Strategy fallback: 848,250 BTC; 451,800,000 diluted shares; debt $6.714B; cash $57M. BTC, shares, debt, preferreds, and cash are live-fetched from strategy.com API when available.
   MSTR:   { btc: 848_250,  sharesDiluted: 451_800_000,  debtUsd: 6_714_000_000, cashUsd: 57_000_000 },
   // Metaplanet: 35,102 BTC (FY2025 audited, Dec 31 2025); 1,166,776,726 shares (Feb 28 2026 TSE filing)
   "3350.T": { btc: 35_102,   sharesDiluted: 1_166_776_726, debtUsd: 275_000_000,   cashUsd: 5_000_000 },
@@ -534,33 +531,6 @@ async function fetchOranjeLive(): Promise<OranjeLive | null> {
     return parseOranjeDashboard(res.data);
   } catch {
     return null;
-  }
-}
-
-// ── Japanese → English translation (for TDnet titles) ───────────────────────
-
-const _titleCache: Map<string, string> = new Map();
-
-async function translateJapanese(title: string): Promise<string> {
-  // If already ASCII/Latin, skip translation
-  if (!/[\u3000-\u9FFF\uF900-\uFAFF]/.test(title)) return title;
-  if (_titleCache.has(title)) return _titleCache.get(title)!;
-  try {
-    const res = await invokeLLM({
-      messages: [
-        {
-          role: "system",
-          content: "You are a financial disclosure translator. Translate the Japanese text to concise English (max 12 words). Return ONLY the English translation, no explanation.",
-        },
-        { role: "user", content: title },
-      ],
-    });
-    const raw = res.choices?.[0]?.message?.content;
-    const translated = (typeof raw === "string" ? raw.trim() : null) ?? title;
-    _titleCache.set(title, translated);
-    return translated;
-  } catch {
-    return title;
   }
 }
 

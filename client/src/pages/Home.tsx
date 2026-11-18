@@ -744,7 +744,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 export default function Home() {
   const { data, isLoading, error, refetch, isFetching } = trpc.treasury.getData.useQuery(undefined, {
-    refetchInterval: 5 * 60_000, // 5 minutes — matches server cache TTL
+    refetchInterval: 5 * 60_000, // 5-minute UI poll; server cache TTL is 30 min live / 2 min fallback
     staleTime: 55_000,
   });
 
@@ -953,7 +953,7 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">
-              Data: CoinGecko · Upbit · Yahoo Finance · TDnet (TSE) · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR · Capital B (Actusnews) · OranjeBTC dashboard / CVM
+              Data: CoinGecko · Upbit · Yahoo Finance · metaplanet.jp IR · LSE alldata · MFN (Nasdaq First North) · strategy.com · SEC EDGAR · Capital B (Actusnews) · OranjeBTC dashboard / CVM
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Auto-refreshes every 5 min
